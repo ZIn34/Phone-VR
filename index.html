@@ -22,6 +22,15 @@
       <p class="lead">Hold your phone up to your eyes, or put it in a headset holder, and look around.</p>
     </header>
 
+    <section class="group" aria-labelledby="games-title">
+      <h2 id="games-title">Games</h2>
+      <a class="card" href="#follow-the-circle">
+        <span class="card-title">Follow the circle</span>
+        <span class="card-text">Keep your crosshair on a moving circle for one minute. It gets faster.</span>
+        <span id="home-best" class="card-best" hidden></span>
+      </a>
+    </section>
+
     <section class="group" aria-labelledby="testing-title">
       <h2 id="testing-title">Testing</h2>
       <a class="card" href="#see-your-room">
@@ -44,16 +53,13 @@
   <main id="intro" class="screen page" hidden>
     <a class="back" href="#">&larr; Home</a>
     <header class="page-head">
-      <h1>See your room</h1>
-      <p class="lead">Your phone's back camera, shown to both eyes.</p>
+      <h1 id="intro-title"></h1>
+      <p id="intro-lead" class="lead"></p>
     </header>
 
     <div id="ready">
-      <ol class="steps">
-        <li>Tap <strong>Start</strong>.</li>
-        <li>Allow <strong>motion</strong> and <strong>camera</strong> when asked.</li>
-        <li>Turn the phone sideways, then hold it up to your eyes or put it in a holder.</li>
-      </ol>
+      <ol id="intro-steps" class="steps"></ol>
+      <p id="intro-best" class="best" hidden></p>
       <button id="start" class="primary" type="button">Start</button>
     </div>
 
@@ -67,10 +73,7 @@
       <button id="continue" class="secondary" type="button">Continue without head tracking</button>
     </div>
 
-    <p class="note">
-      Good to know: a phone has one back camera, so both eyes get the same picture.
-      You will see your room, but it will look flat, not truly 3D.
-    </p>
+    <p id="intro-note" class="note"></p>
   </main>
 
   <!-- VR view -->
@@ -85,6 +88,7 @@
     </div>
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
+      <button id="play-again" type="button" hidden>Play again</button>
       <button id="recentre" type="button">Re-centre</button>
       <button id="open-settings" type="button">Settings</button>
     </div>
@@ -109,11 +113,14 @@
     </div>
   </div>
 
+  <script src="js/experiences.js"></script>
   <script src="js/messages.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/math.js"></script>
   <script src="js/tracking.js"></script>
   <script src="js/markers.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/gameview.js"></script>
   <script src="js/view.js"></script>
   <script src="js/panel.js"></script>
   <script src="js/app.js"></script>

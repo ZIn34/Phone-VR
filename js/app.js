@@ -12,6 +12,7 @@ const screens = {
 const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
 const recentreButton = document.getElementById('recentre');
+const playAgainButton = document.getElementById('play-again');
 const readyBox = document.getElementById('ready');
 const messageBox = document.getElementById('message');
 const continueButton = document.getElementById('continue');
@@ -31,12 +32,71 @@ if (!view) canvas.hidden = true;
 const panel = PVR.createPanel(document.getElementById('panel'));
 const tracking = PVR.createTracking((found) => {
   state.sensor = found;
+  state.planted = false;
   // No readings: say so, and leave the rest of the view working.
   showNotice(found ? null : (state.motion === 'denied' ? 'motionOff' : 'noSensor'));
 });
+
+// Follow the circle. Its best score is kept on this phone.
+const BEST_KEY = 'phone-vr.follow-the-circle.best.v1';
+const game = PVR.game.createGame(Date.now());
+let lastFrame = 0;
+
+function bestScore() {
+  try {
+    return Math.max(0, parseInt(localStorage.getItem(BEST_KEY), 10) || 0);
+  } catch (err) {
+    return state.best;
+  }
+}
+
+game.onFinish = (score) => {
+  // The results show the best as it was, so a new best can be called out.
+  state.bestShown = state.best;
+  if (score > state.best) {
+    state.best = score;
+    try {
+      localStorage.setItem(BEST_KEY, String(score));
+    } catch (err) {
+      // Nowhere to keep it: it still counts until the page is closed.
+    }
+  }
+  playAgainButton.hidden = false;
+};
+
+function playAgain() {
+  playAgainButton.hidden = true;
+  state.bestShown = state.best;
+  state.planted = false;
+  game.restart();
+}
+
+// Before the clock starts, the circle waits level with the horizon, a little
+// to the right of wherever the player is facing. Starting takes a deliberate,
+// steady look, so the clock cannot start while the phone is still on its way
+// to your face. The spot it starts from then becomes "front" for that go.
+function plantStartCircle(orientation) {
+  const facing = PVR.math.yawOf(orientation);
+  const away = Math.atan2(Math.sin(facing - tracking.frontYaw()), Math.cos(facing - tracking.frontYaw()));
+  if (state.planted && Math.abs(away) < 25 * Math.PI / 180) return;
+  tracking.setFront(facing + 8 * Math.PI / 180);
+  state.planted = true;
+}
+
 if (view) {
   view.setPainter((ctx, width, height, focal) => {
-    PVR.paintMarkers(ctx, width, height, focal, tracking.orientation(), tracking.frontYaw());
+    const orientation = tracking.orientation();
+    if (state.experience !== 'follow-the-circle') {
+      PVR.paintMarkers(ctx, width, height, focal, orientation, tracking.frontYaw());
+      return;
+    }
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastFrame) / 1000); // a long gap (page in the background) does not count
+    lastFrame = now;
+    if (game.phase === 'waiting') plantStartCircle(orientation);
+    game.update(dt, orientation, tracking.frontYaw());
+    if (game.phase !== 'done') playAgainButton.hidden = true;
+    PVR.paintGame(ctx, width, height, focal, orientation, tracking.frontYaw(), game, state.bestShown);
   });
 }
 
@@ -46,7 +106,12 @@ const state = {
   message: null,     // which problem message is showing, if any
   sensor: null,      // true once the phone sends motion readings, false if none arrive
   wakeLock: null,
+  experience: null,  // which experience is open: a key of PVR.experiences
+  best: 0,           // best score in Follow the circle
+  bestShown: 0,      // the best to show beside the current go
+  planted: false,    // whether the circle that starts a go has been put in front of the player
 };
+state.best = state.bestShown = bestScore();
 
 function show(name) {
   for (const key in screens) screens[key].hidden = key !== name;
@@ -56,9 +121,30 @@ function show(name) {
 function route() {
   stopCamera();
   showMessage(null);
-  const intro = location.hash === '#see-your-room';
-  show(intro ? 'intro' : 'home');
-  if (intro && !canUseSensors()) showMessage('insecure');
+  const key = location.hash.slice(1);
+  const experience = PVR.experiences[key];
+  state.experience = experience ? key : null;
+  state.best = state.bestShown = bestScore();
+  const homeBest = document.getElementById('home-best');
+  homeBest.hidden = !state.best;
+  homeBest.textContent = 'Best score: ' + state.best;
+  if (!experience) return show('home');
+
+  document.getElementById('intro-title').textContent = experience.title;
+  document.getElementById('intro-lead').textContent = experience.lead;
+  document.getElementById('intro-note').textContent = experience.note;
+  const steps = document.getElementById('intro-steps');
+  steps.textContent = '';
+  for (const step of experience.steps) {
+    const item = document.createElement('li');
+    item.textContent = step;
+    steps.append(item);
+  }
+  const introBest = document.getElementById('intro-best');
+  introBest.hidden = !(experience.scored && state.best);
+  introBest.textContent = 'Your best score: ' + state.best;
+  show('intro');
+  if (!canUseSensors()) showMessage('insecure');
 }
 
 // Phones only hand out the camera and motion sensors to pages opened over https.
@@ -167,6 +253,7 @@ async function keepAwake() {
 
 function stopCamera() {
   panel.close();
+  playAgainButton.hidden = true;
   showNotice(null);
   if (view) view.stop();
   tracking.stop();
@@ -189,6 +276,8 @@ async function start(options) {
     video.srcObject = state.stream;
     await video.play();
     show('vr');
+    playAgain();
+    lastFrame = performance.now();
     tracking.start();
     if (view) view.start();
     keepAwake();
@@ -210,6 +299,7 @@ document.getElementById('notice-retry').addEventListener('click', () => {
 });
 exitButton.addEventListener('click', () => { location.hash = ''; });
 recentreButton.addEventListener('click', () => tracking.recentre());
+playAgainButton.addEventListener('click', playAgain);
 document.getElementById('open-settings').addEventListener('click', () => panel.toggle());
 
 // One tap anywhere on the pictures opens or closes the settings.

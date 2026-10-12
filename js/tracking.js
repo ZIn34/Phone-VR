@@ -54,6 +54,7 @@ window.PVR = window.PVR || {};
       frontYaw() { return frontYaw; },
       // Makes "front" the way the viewer is looking right now.
       recentre() { frontYaw = math.yawOf(tracking.orientation()); },
+      setFront(yaw) { frontYaw = yaw; },
       // Turns the pretend head. Only has an effect while there is no sensor.
       look(yaw, pitch) {
         pretendYaw += yaw;
