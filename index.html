@@ -70,6 +70,22 @@
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
       <button id="recentre" type="button">Re-centre</button>
+      <button id="open-settings" type="button">Settings</button>
+    </div>
+
+    <!-- Eye-fit settings: opens over the pictures so changes show straight away -->
+    <div id="panel" class="panel" hidden>
+      <h2>Eye fit</h2>
+      <div id="setting-rows">
+        <div id="lens-row" class="setting">
+          <span class="setting-label">Lens correction</span>
+          <button id="lens-toggle" class="switch" type="button">On</button>
+        </div>
+      </div>
+      <div class="panel-buttons">
+        <button id="reset" type="button">Reset</button>
+        <button id="done" class="panel-done" type="button">Done</button>
+      </div>
     </div>
     <div class="rotate">
       <div class="rotate-icon" aria-hidden="true"></div>
@@ -82,6 +98,7 @@
   <script src="js/tracking.js"></script>
   <script src="js/markers.js"></script>
   <script src="js/view.js"></script>
+  <script src="js/panel.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

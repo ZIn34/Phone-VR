@@ -25,6 +25,7 @@ try {
 }
 if (!view) canvas.hidden = true;
 
+const panel = PVR.createPanel(document.getElementById('panel'));
 const tracking = PVR.createTracking((found) => { state.sensor = found; });
 if (view) {
   view.setPainter((ctx, width, height, focal) => {
@@ -117,6 +118,7 @@ async function keepAwake() {
 }
 
 function stopCamera() {
+  panel.close();
   if (view) view.stop();
   tracking.stop();
   if (state.wakeLock) state.wakeLock.release();
@@ -149,20 +151,30 @@ async function start() {
 startButton.addEventListener('click', start);
 exitButton.addEventListener('click', () => { location.hash = ''; });
 recentreButton.addEventListener('click', () => tracking.recentre());
+document.getElementById('open-settings').addEventListener('click', () => panel.toggle());
 
+// One tap anywhere on the pictures opens or closes the settings.
 // With no motion sensor, dragging the picture (or the arrow keys) turns a pretend head.
 let drag = null;
 canvas.addEventListener('pointerdown', (event) => {
-  drag = { x: event.clientX, y: event.clientY };
+  drag = { x: event.clientX, y: event.clientY, moved: 0 };
   canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener('pointermove', (event) => {
-  if (!drag || tracking.hasSensor()) return;
+  if (!drag) return;
+  const dx = event.clientX - drag.x;
+  const dy = event.clientY - drag.y;
+  drag.x = event.clientX;
+  drag.y = event.clientY;
+  drag.moved += Math.abs(dx) + Math.abs(dy);
+  if (tracking.hasSensor()) return;
   const perPixel = 0.7 / canvas.clientHeight; // about one picture height per 40 degrees
-  tracking.look(-(event.clientX - drag.x) * perPixel, (event.clientY - drag.y) * perPixel);
-  drag = { x: event.clientX, y: event.clientY };
+  tracking.look(-dx * perPixel, dy * perPixel);
 });
-canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('pointerup', () => {
+  if (drag && drag.moved < 10) panel.toggle();
+  drag = null;
+});
 canvas.addEventListener('pointercancel', () => { drag = null; });
 window.addEventListener('keydown', (event) => {
   if (screens.vr.hidden || tracking.hasSensor()) return;
