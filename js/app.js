@@ -13,6 +13,16 @@ const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
 const statusLine = document.getElementById('status');
 const video = document.getElementById('camera');
+const canvas = document.getElementById('view');
+
+// If the two-eye drawing cannot start, the plain camera picture underneath still shows.
+let view = null;
+try {
+  view = PVR.createView(canvas, video, PVR.settings);
+} catch (err) {
+  view = null;
+}
+if (!view) canvas.hidden = true;
 
 const state = {
   stream: null,
@@ -86,6 +96,7 @@ function demoStream() {
 }
 
 function stopCamera() {
+  if (view) view.stop();
   if (!state.stream) return;
   state.stream.getTracks().forEach((track) => track.stop());
   state.stream = null;
@@ -101,6 +112,7 @@ async function start() {
     video.srcObject = state.stream;
     await video.play();
     show('vr');
+    if (view) view.start();
   } catch (err) {
     stopCamera();
     setStatus('The camera could not be started. Allow the camera for this page, then tap Start again.');

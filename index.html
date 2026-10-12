@@ -18,7 +18,7 @@
   <main id="home" class="screen page" hidden>
     <header class="page-head">
       <h1>Phone VR</h1>
-      <p class="lead">Put your phone in a headset holder and look around.</p>
+      <p class="lead">Hold your phone up to your eyes, or put it in a headset holder, and look around.</p>
     </header>
 
     <section class="group" aria-labelledby="testing-title">
@@ -50,7 +50,7 @@
     <ol class="steps">
       <li>Tap <strong>Start</strong>.</li>
       <li>Allow <strong>motion</strong> and <strong>camera</strong> when asked.</li>
-      <li>Turn the phone sideways and put it in the headset.</li>
+      <li>Turn the phone sideways, then hold it up to your eyes or put it in a holder.</li>
     </ol>
 
     <button id="start" class="primary" type="button">Start</button>
@@ -65,6 +65,8 @@
   <!-- VR view -->
   <div id="vr" class="screen" hidden>
     <video id="camera" playsinline muted autoplay></video>
+    <canvas id="view"></canvas>
+    <div class="divider"></div>
     <button id="exit" class="vr-button" type="button">Exit</button>
     <div class="rotate">
       <div class="rotate-icon" aria-hidden="true"></div>
@@ -72,6 +74,8 @@
     </div>
   </div>
 
+  <script src="js/settings.js"></script>
+  <script src="js/view.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
