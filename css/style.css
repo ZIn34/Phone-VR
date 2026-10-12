@@ -188,7 +188,7 @@ html, body {
   left: 50%;
   bottom: calc(.4rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  z-index: 3;
+  z-index: 6; /* above the turn-sideways message, so Exit is always reachable */
   display: flex;
   gap: .4rem;
 }
