@@ -113,6 +113,7 @@ html, body {
 
 /* The two eye pictures are drawn here, on top of the plain camera picture. */
 #view {
+  cursor: grab;
   position: absolute;
   inset: 0;
   width: 100%;
@@ -131,19 +132,27 @@ html, body {
   pointer-events: none;
 }
 
-.vr-button {
+/* Buttons at the bottom middle, between the lenses, where thumbs can reach. */
+.vr-bar {
   position: absolute;
-  top: calc(.5rem + env(safe-area-inset-top));
-  left: calc(.5rem + env(safe-area-inset-left));
+  left: 50%;
+  bottom: calc(.4rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
   z-index: 3;
-  padding: .45rem .9rem;
+  display: flex;
+  gap: .4rem;
+}
+.vr-bar button {
+  padding: .45rem .8rem;
   font: inherit;
-  font-size: .9rem;
+  font-size: .85rem;
+  white-space: nowrap;
   color: #fff;
-  background: rgba(0, 0, 0, .55);
+  background: rgba(0, 0, 0, .6);
   border: 1px solid rgba(255, 255, 255, .35);
   border-radius: 999px;
 }
+.vr-bar button:active { background: rgba(79, 140, 255, .8); }
 
 .rotate {
   position: absolute;

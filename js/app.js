@@ -11,6 +11,7 @@ const screens = {
 };
 const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
+const recentreButton = document.getElementById('recentre');
 const statusLine = document.getElementById('status');
 const video = document.getElementById('camera');
 const canvas = document.getElementById('view');
@@ -24,9 +25,18 @@ try {
 }
 if (!view) canvas.hidden = true;
 
+const tracking = PVR.createTracking((found) => { state.sensor = found; });
+if (view) {
+  view.setPainter((ctx, width, height, focal) => {
+    PVR.paintMarkers(ctx, width, height, focal, tracking.orientation(), tracking.frontYaw());
+  });
+}
+
 const state = {
   stream: null,
   motion: 'unknown', // 'granted' | 'denied' | 'unavailable'
+  sensor: null,      // true once the phone sends motion readings, false if none arrive
+  wakeLock: null,
 };
 
 function show(name) {
@@ -95,8 +105,21 @@ function demoStream() {
   return stream;
 }
 
+// Stops the phone dimming and locking while it is in front of your eyes.
+async function keepAwake() {
+  if (!navigator.wakeLock || state.wakeLock) return;
+  try {
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    state.wakeLock.addEventListener('release', () => { state.wakeLock = null; });
+  } catch (err) {
+    state.wakeLock = null;
+  }
+}
+
 function stopCamera() {
   if (view) view.stop();
+  tracking.stop();
+  if (state.wakeLock) state.wakeLock.release();
   if (!state.stream) return;
   state.stream.getTracks().forEach((track) => track.stop());
   state.stream = null;
@@ -112,7 +135,9 @@ async function start() {
     video.srcObject = state.stream;
     await video.play();
     show('vr');
+    tracking.start();
     if (view) view.start();
+    keepAwake();
   } catch (err) {
     stopCamera();
     setStatus('The camera could not be started. Allow the camera for this page, then tap Start again.');
@@ -123,6 +148,33 @@ async function start() {
 
 startButton.addEventListener('click', start);
 exitButton.addEventListener('click', () => { location.hash = ''; });
+recentreButton.addEventListener('click', () => tracking.recentre());
+
+// With no motion sensor, dragging the picture (or the arrow keys) turns a pretend head.
+let drag = null;
+canvas.addEventListener('pointerdown', (event) => {
+  drag = { x: event.clientX, y: event.clientY };
+  canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener('pointermove', (event) => {
+  if (!drag || tracking.hasSensor()) return;
+  const perPixel = 0.7 / canvas.clientHeight; // about one picture height per 40 degrees
+  tracking.look(-(event.clientX - drag.x) * perPixel, (event.clientY - drag.y) * perPixel);
+  drag = { x: event.clientX, y: event.clientY };
+});
+canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('pointercancel', () => { drag = null; });
+window.addEventListener('keydown', (event) => {
+  if (screens.vr.hidden || tracking.hasSensor()) return;
+  const step = 5 * Math.PI / 180;
+  if (event.key === 'ArrowLeft') tracking.look(-step, 0);
+  if (event.key === 'ArrowRight') tracking.look(step, 0);
+  if (event.key === 'ArrowUp') tracking.look(0, step);
+  if (event.key === 'ArrowDown') tracking.look(0, -step);
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !screens.vr.hidden) keepAwake();
+});
 window.addEventListener('hashchange', route);
 
 // Already opened from the Home Screen: the bars are gone, so the tip is not needed.
