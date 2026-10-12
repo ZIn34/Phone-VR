@@ -12,7 +12,10 @@ const screens = {
 const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
 const recentreButton = document.getElementById('recentre');
-const statusLine = document.getElementById('status');
+const readyBox = document.getElementById('ready');
+const messageBox = document.getElementById('message');
+const continueButton = document.getElementById('continue');
+const noticeBox = document.getElementById('notice');
 const video = document.getElementById('camera');
 const canvas = document.getElementById('view');
 
@@ -26,7 +29,11 @@ try {
 if (!view) canvas.hidden = true;
 
 const panel = PVR.createPanel(document.getElementById('panel'));
-const tracking = PVR.createTracking((found) => { state.sensor = found; });
+const tracking = PVR.createTracking((found) => {
+  state.sensor = found;
+  // No readings: say so, and leave the rest of the view working.
+  showNotice(found ? null : (state.motion === 'denied' ? 'motionOff' : 'noSensor'));
+});
 if (view) {
   view.setPainter((ctx, width, height, focal) => {
     PVR.paintMarkers(ctx, width, height, focal, tracking.orientation(), tracking.frontYaw());
@@ -36,6 +43,7 @@ if (view) {
 const state = {
   stream: null,
   motion: 'unknown', // 'granted' | 'denied' | 'unavailable'
+  message: null,     // which problem message is showing, if any
   sensor: null,      // true once the phone sends motion readings, false if none arrive
   wakeLock: null,
 };
@@ -47,11 +55,51 @@ function show(name) {
 
 function route() {
   stopCamera();
-  show(location.hash === '#see-your-room' ? 'intro' : 'home');
+  showMessage(null);
+  const intro = location.hash === '#see-your-room';
+  show(intro ? 'intro' : 'home');
+  if (intro && !canUseSensors()) showMessage('insecure');
 }
 
-function setStatus(text) {
-  statusLine.textContent = text;
+// Phones only hand out the camera and motion sensors to pages opened over https.
+function canUseSensors() {
+  return DEMO || window.isSecureContext;
+}
+
+// Replaces the Start button with what went wrong and how to fix it. Pass null to clear it.
+function showMessage(key) {
+  state.message = key;
+  messageBox.hidden = !key;
+  readyBox.hidden = !!key;
+  if (!key) return;
+  const message = PVR.messages[key];
+  document.getElementById('message-title').textContent = message.title;
+  document.getElementById('message-text').textContent = message.text;
+  const steps = document.getElementById('message-steps');
+  steps.textContent = '';
+  for (const step of message.steps) {
+    const item = document.createElement('li');
+    item.textContent = step;
+    steps.append(item);
+  }
+  const more = document.getElementById('message-more');
+  more.textContent = message.more || '';
+  more.hidden = !message.more;
+  continueButton.hidden = !message.canContinue;
+}
+
+function showNotice(key) {
+  noticeBox.hidden = !key;
+  if (key) document.getElementById('notice-text').textContent = PVR.notices[key];
+}
+
+function tryAgain() {
+  if (state.message === 'insecure') {
+    // The same page at its secure address, if there is one.
+    if (location.protocol === 'http:') location.protocol = 'https:'; else location.reload();
+    return;
+  }
+  start();
 }
 
 // iPhone only shows the motion question when it is asked straight from a tap,
@@ -69,7 +117,7 @@ async function askForMotion() {
 async function askForCamera() {
   if (DEMO) return demoStream();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error('This browser cannot use the camera from this page.');
+    throw new DOMException('This browser cannot use the camera from this page.', 'NotFoundError');
   }
   return navigator.mediaDevices.getUserMedia({
     audio: false,
@@ -119,6 +167,7 @@ async function keepAwake() {
 
 function stopCamera() {
   panel.close();
+  showNotice(null);
   if (view) view.stop();
   tracking.stop();
   if (state.wakeLock) state.wakeLock.release();
@@ -128,11 +177,14 @@ function stopCamera() {
   video.srcObject = null;
 }
 
-async function start() {
+async function start(options) {
+  const skipMotion = !!(options && options.skipMotion);
+  showMessage(null);
+  if (!canUseSensors()) return showMessage('insecure');
   startButton.disabled = true;
-  setStatus('');
   try {
-    state.motion = await askForMotion();
+    state.motion = skipMotion ? 'denied' : await askForMotion();
+    if (state.motion === 'denied' && !skipMotion) return showMessage('motionDenied');
     state.stream = await askForCamera();
     video.srcObject = state.stream;
     await video.play();
@@ -142,13 +194,20 @@ async function start() {
     keepAwake();
   } catch (err) {
     stopCamera();
-    setStatus('The camera could not be started. Allow the camera for this page, then tap Start again.');
+    showMessage(PVR.cameraMessage(err));
   } finally {
     startButton.disabled = false;
   }
 }
 
-startButton.addEventListener('click', start);
+startButton.addEventListener('click', () => start());
+document.getElementById('retry').addEventListener('click', tryAgain);
+continueButton.addEventListener('click', () => start({ skipMotion: true }));
+document.getElementById('notice-ok').addEventListener('click', () => showNotice(null));
+document.getElementById('notice-retry').addEventListener('click', () => {
+  showNotice(null);
+  tracking.start(); // listens again; the notice comes back if there are still no readings
+});
 exitButton.addEventListener('click', () => { location.hash = ''; });
 recentreButton.addEventListener('click', () => tracking.recentre());
 document.getElementById('open-settings').addEventListener('click', () => panel.toggle());

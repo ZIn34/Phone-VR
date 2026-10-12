@@ -47,14 +47,24 @@
       <p class="lead">Your phone's back camera, shown to both eyes.</p>
     </header>
 
-    <ol class="steps">
-      <li>Tap <strong>Start</strong>.</li>
-      <li>Allow <strong>motion</strong> and <strong>camera</strong> when asked.</li>
-      <li>Turn the phone sideways, then hold it up to your eyes or put it in a holder.</li>
-    </ol>
+    <div id="ready">
+      <ol class="steps">
+        <li>Tap <strong>Start</strong>.</li>
+        <li>Allow <strong>motion</strong> and <strong>camera</strong> when asked.</li>
+        <li>Turn the phone sideways, then hold it up to your eyes or put it in a holder.</li>
+      </ol>
+      <button id="start" class="primary" type="button">Start</button>
+    </div>
 
-    <button id="start" class="primary" type="button">Start</button>
-    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <!-- Shown instead of Start when something is refused or missing -->
+    <div id="message" class="message" role="alert" hidden>
+      <h2 id="message-title"></h2>
+      <p id="message-text"></p>
+      <ol id="message-steps"></ol>
+      <p id="message-more"></p>
+      <button id="retry" class="primary" type="button">Try again</button>
+      <button id="continue" class="secondary" type="button">Continue without head tracking</button>
+    </div>
 
     <p class="note">
       Good to know: a phone has one back camera, so both eyes get the same picture.
@@ -67,6 +77,11 @@
     <video id="camera" playsinline muted autoplay></video>
     <canvas id="view"></canvas>
     <div class="divider"></div>
+    <div id="notice" class="notice" role="status" hidden>
+      <p id="notice-text"></p>
+      <button id="notice-retry" type="button">Try again</button>
+      <button id="notice-ok" type="button">OK</button>
+    </div>
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
       <button id="recentre" type="button">Re-centre</button>
@@ -93,6 +108,7 @@
     </div>
   </div>
 
+  <script src="js/messages.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/math.js"></script>
   <script src="js/tracking.js"></script>
