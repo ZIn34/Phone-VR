@@ -141,7 +141,10 @@ window.PVR = window.PVR || {};
         overlayContext.clearRect(0, 0, width, OVERLAY_HEIGHT);
         // Scene units per unit of tan(angle), so the painter can place things by direction.
         const focal = cover * (Math.max(vw, vh) || 2) / 2 / Math.tan(CAMERA_FOV / 2);
-        painter(overlayContext, width, OVERLAY_HEIGHT, focal);
+        // Where a point of the camera picture (as shares of its width and height) lands on the overlay.
+        const unit = OVERLAY_HEIGHT / 2;
+        const place = (u, v) => [width / 2 + (u - 0.5) * vw * cover * unit, unit - (0.5 - v) * vh * cover * unit];
+        painter(overlayContext, width, OVERLAY_HEIGHT, focal, place);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, overlayTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay);

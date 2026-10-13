@@ -22,6 +22,24 @@
       <p class="lead">Hold your phone up to your eyes, or put it in a headset holder, and look around.</p>
     </header>
 
+    <section class="group" aria-labelledby="level-title">
+      <h2 id="level-title">How you play</h2>
+      <div class="levels">
+        <button class="level" type="button" data-level="1">
+          <span class="level-name">Level 1 &middot; Screen buttons</span>
+          <span class="level-text">Hold the phone in your hands. Turn to look, tap the side buttons to act.</span>
+        </button>
+        <button class="level" type="button" data-level="2">
+          <span class="level-name">Level 2 &middot; One hand</span>
+          <span class="level-text">Hold the phone to your eyes with one hand. Your other hand does the actions.</span>
+        </button>
+        <button class="level" type="button" data-level="3">
+          <span class="level-name">Level 3 &middot; Both hands</span>
+          <span class="level-text">Phone in a headset holder. Both your hands do the actions.</span>
+        </button>
+      </div>
+    </section>
+
     <section class="group" aria-labelledby="games-title">
       <h2 id="games-title">Games</h2>
       <a class="card" href="#follow-the-circle">
@@ -36,6 +54,10 @@
       <a class="card" href="#see-your-room">
         <span class="card-title">See your room</span>
         <span class="card-text">Your back camera in both eyes, with head tracking markers.</span>
+      </a>
+      <a class="card" href="#pop-the-targets">
+        <span class="card-title">Pop the targets</span>
+        <span class="card-text">Try out your way of playing: side buttons, one hand or both hands.</span>
       </a>
     </section>
 
@@ -86,6 +108,9 @@
       <button id="notice-retry" type="button">Try again</button>
       <button id="notice-ok" type="button">OK</button>
     </div>
+    <!-- Level 1: action buttons under the thumbs -->
+    <button id="act-left" class="side-button left" type="button" hidden>POP</button>
+    <button id="act-right" class="side-button right" type="button" hidden>POP</button>
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
       <button id="play-again" type="button" hidden>Play again</button>
@@ -116,13 +141,17 @@
   <script src="js/experiences.js"></script>
   <script src="js/messages.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/panel.js"></script>
   <script src="js/math.js"></script>
   <script src="js/tracking.js"></script>
   <script src="js/markers.js"></script>
   <script src="js/game.js"></script>
   <script src="js/gameview.js"></script>
+  <script src="js/targets.js"></script>
+  <script src="js/targetsview.js"></script>
+  <script src="js/hands.js"></script>
+  <script src="js/handui.js"></script>
   <script src="js/view.js"></script>
-  <script src="js/panel.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

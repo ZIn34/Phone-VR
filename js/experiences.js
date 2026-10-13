@@ -2,6 +2,9 @@
 
 // The things you can open from the home screen, and what each one says before
 // you start. The key is the part of the address after the #.
+//
+// steps can be one list, or a list for each level (how you play). levels, if
+// given, names the levels it works at; it is hidden at the others.
 window.PVR = window.PVR || {};
 
 PVR.experiences = {
@@ -26,5 +29,29 @@ PVR.experiences = {
     ],
     note: 'Good to know: you play over the camera picture of your room. Sit or stand where you can turn your head freely. The circle stays in front of you, so you never have to turn right round.',
     scored: true,
+  },
+  'pop-the-targets': {
+    title: 'Pop the targets',
+    lead: 'A quick test of how you play: pop the blue targets floating around you.',
+    steps: {
+      1: [
+        'Tap Start, allow motion and camera, and turn the phone sideways.',
+        'Hold the phone in both hands, up to your eyes.',
+        'Turn to put the cross on a target. It turns green.',
+        'Tap a POP button at either side of the screen with your thumb.',
+      ],
+      2: [
+        'Tap Start, allow motion and camera, and turn the phone sideways.',
+        'Hold the phone to your eyes with one hand.',
+        'Hold your other hand up in front of the phone, in good light. A white ring marks your fingertip.',
+        'Touch a target with your fingertip to pop it.',
+      ],
+      3: [
+        'Tap Start, allow motion and camera, then put the phone in its holder.',
+        'Hold both hands up in front of you, in good light. A white ring marks each index fingertip.',
+        'Touch a target with either fingertip to pop it.',
+      ],
+    },
+    note: 'Good to know: at Levels 2 and 3 the camera has to see your hand, so keep it in front of the phone and in good light. The first time, hand tracking takes a few seconds to get ready. To change level, go back to the home screen.',
   },
 };

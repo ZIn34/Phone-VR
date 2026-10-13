@@ -7,6 +7,7 @@ window.PVR = window.PVR || {};
 (function (PVR) {
   const percent = (value) => Math.round(value * 100) + '%';
   const ROWS = [
+    { name: 'level', label: 'How you play', less: 'Lower level', more: 'Higher level', show: (value) => 'Level ' + value },
     { name: 'separation', label: 'Eye distance', less: 'Closer together', more: 'Further apart', show: percent },
     { name: 'size', label: 'Picture size', less: 'Smaller', more: 'Bigger', show: percent },
     {
@@ -15,6 +16,7 @@ window.PVR = window.PVR || {};
     },
     { name: 'strength', label: 'Correction strength', less: 'Weaker', more: 'Stronger', show: percent },
   ];
+  PVR.settingRows = ROWS; // the hand-worked menu shows the same settings
   const HOLD_DELAY = 400;  // ms a button is held before it starts repeating
   const HOLD_EVERY = 90;
 

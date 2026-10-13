@@ -8,6 +8,7 @@ window.PVR = window.PVR || {};
   const STORAGE_KEY = 'phone-vr.settings.v1';
 
   PVR.defaultSettings = {
+    level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
     size: 1,            // 1 = the picture is as tall as the screen
     offsetY: 0,         // up (+) or down (-), as a share of the screen height
@@ -17,6 +18,7 @@ window.PVR = window.PVR || {};
 
   // Lowest value, highest value, and how much one press of - or + changes it.
   PVR.settingLimits = {
+    level: { min: 1, max: 3, step: 1 },
     separation: { min: 0.3, max: 0.7, step: 0.01 },
     size: { min: 0.5, max: 1.5, step: 0.02 },
     offsetY: { min: -0.25, max: 0.25, step: 0.01 },
@@ -55,8 +57,9 @@ window.PVR = window.PVR || {};
     }
   };
 
+  // Puts the eye fit back to its starting values. How you play is left alone.
   PVR.resetSettings = function () {
-    Object.assign(PVR.settings, PVR.defaultSettings);
+    Object.assign(PVR.settings, PVR.defaultSettings, { level: PVR.settings.level });
     PVR.saveSettings();
   };
 

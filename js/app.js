@@ -13,6 +13,8 @@ const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
 const recentreButton = document.getElementById('recentre');
 const playAgainButton = document.getElementById('play-again');
+const sideButtons = [document.getElementById('act-left'), document.getElementById('act-right')];
+const levelButtons = Array.from(document.querySelectorAll('.level'));
 const readyBox = document.getElementById('ready');
 const messageBox = document.getElementById('message');
 const continueButton = document.getElementById('continue');
@@ -83,21 +85,86 @@ function plantStartCircle(orientation) {
   state.planted = true;
 }
 
+// Pop the targets, and the hand tracking that Levels 2 and 3 use.
+const targets = PVR.targets.createTargets(Date.now());
+const hands = PVR.createHands(video);
+const handMenu = PVR.createHandMenu({
+  recentre: () => tracking.recentre(),
+  exit: () => { location.hash = ''; },
+  playAgain,
+  canPlayAgain: () => state.experience === 'follow-the-circle' && game.phase === 'done',
+});
+
+// Shows only the controls that work at this level, and runs hand tracking only when it is used.
+function fitControlsToLevel(level) {
+  const buttons = level === 1 && state.experience === 'pop-the-targets';
+  for (const button of sideButtons) button.hidden = !buttons;
+  if (level === 1) {
+    hands.stop();
+    handMenu.close();
+  } else {
+    hands.start(level === 3 ? 2 : 1);
+  }
+}
+
 if (view) {
-  view.setPainter((ctx, width, height, focal) => {
-    const orientation = tracking.orientation();
-    if (state.experience !== 'follow-the-circle') {
-      PVR.paintMarkers(ctx, width, height, focal, orientation, tracking.frontYaw());
-      return;
-    }
+  view.setPainter((ctx, width, height, focal, place) => {
     const now = performance.now();
     const dt = Math.min(0.1, (now - lastFrame) / 1000); // a long gap (page in the background) does not count
     lastFrame = now;
-    if (game.phase === 'waiting') plantStartCircle(orientation);
-    game.update(dt, orientation, tracking.frontYaw());
-    if (game.phase !== 'done') playAgainButton.hidden = true;
-    PVR.paintGame(ctx, width, height, focal, orientation, tracking.frontYaw(), game, state.bestShown);
+    const orientation = tracking.orientation();
+    const front = tracking.frontYaw();
+    const level = PVR.settings.level;
+    fitControlsToLevel(level);
+
+    // Hands, as places on this canvas. None at Level 1.
+    let seen = [];
+    if (level > 1) {
+      hands.update(now);
+      seen = hands.inView(now).map((hand) => ({ tip: place(hand.tip[0], hand.tip[1]), palm: place(hand.palm[0], hand.palm[1]) }));
+    }
+    const fingertips = seen.map((hand) => hand.tip);
+
+    if (state.experience === 'follow-the-circle') {
+      if (game.phase === 'waiting') plantStartCircle(orientation);
+      game.update(dt, orientation, tracking.frontYaw());
+      if (game.phase !== 'done') playAgainButton.hidden = true;
+      PVR.paintGame(ctx, width, height, focal, orientation, tracking.frontYaw(), game, state.bestShown);
+    } else if (state.experience === 'pop-the-targets') {
+      targets.update(dt);
+      // While the hand menu is open, hands work the menu, not the targets.
+      PVR.paintTargets(ctx, width, height, focal, orientation, front, targets, level, handMenu.isOpen() ? [] : fingertips);
+    } else {
+      PVR.paintMarkers(ctx, width, height, focal, orientation, front);
+    }
+
+    if (level > 1) {
+      handMenu.paint(ctx, width, height, fingertips, dt);
+      PVR.paintHands(ctx, width, height, seen, hands.status);
+    }
   });
+}
+
+// Level 1: a side button pops the target under the cross.
+function popAimed() {
+  const aimed = targets.aimedAt(tracking.orientation(), tracking.frontYaw());
+  if (aimed >= 0) targets.pop(aimed);
+}
+
+function chooseLevel(level) {
+  PVR.settings.level = PVR.clampSetting('level', level);
+  PVR.saveSettings();
+  showLevel();
+}
+
+// Marks the chosen level on the home screen and hides anything that does not work at it.
+function showLevel() {
+  const level = PVR.settings.level;
+  for (const button of levelButtons) button.setAttribute('aria-pressed', Number(button.dataset.level) === level);
+  for (const card of document.querySelectorAll('#home .card')) {
+    const experience = PVR.experiences[card.getAttribute('href').slice(1)];
+    card.hidden = !!(experience && experience.levels && !experience.levels.includes(level));
+  }
 }
 
 const state = {
@@ -128,14 +195,19 @@ function route() {
   const homeBest = document.getElementById('home-best');
   homeBest.hidden = !state.best;
   homeBest.textContent = 'Best score: ' + state.best;
-  if (!experience) return show('home');
+  showLevel();
+  const level = PVR.settings.level;
+  if (!experience || (experience.levels && !experience.levels.includes(level))) {
+    state.experience = null;
+    return show('home');
+  }
 
   document.getElementById('intro-title').textContent = experience.title;
   document.getElementById('intro-lead').textContent = experience.lead;
   document.getElementById('intro-note').textContent = experience.note;
   const steps = document.getElementById('intro-steps');
   steps.textContent = '';
-  for (const step of experience.steps) {
+  for (const step of (Array.isArray(experience.steps) ? experience.steps : experience.steps[level])) {
     const item = document.createElement('li');
     item.textContent = step;
     steps.append(item);
@@ -253,6 +325,10 @@ async function keepAwake() {
 
 function stopCamera() {
   panel.close();
+  hands.stop();
+  hands.retry();
+  handMenu.close();
+  for (const button of sideButtons) button.hidden = true;
   playAgainButton.hidden = true;
   showNotice(null);
   if (view) view.stop();
@@ -277,6 +353,7 @@ async function start(options) {
     await video.play();
     show('vr');
     playAgain();
+    targets.restart();
     lastFrame = performance.now();
     tracking.start();
     if (view) view.start();
@@ -300,6 +377,8 @@ document.getElementById('notice-retry').addEventListener('click', () => {
 exitButton.addEventListener('click', () => { location.hash = ''; });
 recentreButton.addEventListener('click', () => tracking.recentre());
 playAgainButton.addEventListener('click', playAgain);
+for (const button of sideButtons) button.addEventListener('click', popAimed);
+for (const button of levelButtons) button.addEventListener('click', () => chooseLevel(Number(button.dataset.level)));
 document.getElementById('open-settings').addEventListener('click', () => panel.toggle());
 
 // One tap anywhere on the pictures opens or closes the settings.
