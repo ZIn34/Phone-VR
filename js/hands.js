@@ -73,11 +73,24 @@ window.PVR = window.PVR || {};
       lastLook = now;
       try {
         const found = landmarker.detectForVideo(video, now);
-        hands.list = found.landmarks.map((points) => ({
-          tip: [points[8].x, points[8].y],   // end of the index finger
-          palm: [(points[0].x + points[5].x + points[17].x) / 3, (points[0].y + points[5].y + points[17].y) / 3],
-          points: points.map((point) => [point.x, point.y]),
-        }));
+        const sides = found.handedness || found.handednesses || [];
+        hands.list = found.landmarks.map((points, i) => {
+          const far = (a, b) => Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y);
+          // Which way the hand is turned: the sign of this flips between palm and back,
+          // and is opposite for left and right hands.
+          const turn = (points[5].x - points[0].x) * (points[17].y - points[0].y) - (points[5].y - points[0].y) * (points[17].x - points[0].x);
+          const right = sides[i] && sides[i][0] && sides[i][0].categoryName === 'Right';
+          return {
+            tip: [points[8].x, points[8].y],   // end of the index finger
+            palm: [(points[0].x + points[5].x + points[17].x) / 3, (points[0].y + points[5].y + points[17].y) / 3],
+            // Thumb and index fingertip close together, measured against the size of the hand.
+            pinch: far(4, 8) / far(0, 9),
+            // All four fingers stretched out.
+            open: [8, 12, 16, 20].every((tip) => far(tip, 0) > far(tip - 2, 0) * 1.1),
+            // The palm, not the back of the hand, is towards the camera.
+            palmUp: right ? turn < 0 : turn > 0,
+          };
+        });
         hands.seenAt = now;
       } catch (err) {
         hands.list = [];

@@ -88,12 +88,32 @@ function plantStartCircle(orientation) {
 // Pop the targets, and the hand tracking that Levels 2 and 3 use.
 const targets = PVR.targets.createTargets(Date.now());
 const hands = PVR.createHands(video);
-const handMenu = PVR.createHandMenu({
+
+// The floating menu lists what works at the current level.
+function worksAt(experience, level) {
+  return !experience.levels || experience.levels.includes(level);
+}
+
+const menu = PVR.createMenu({
+  tiles: () => Object.keys(PVR.experiences)
+    .filter((key) => !PVR.experiences[key].notInMenu && worksAt(PVR.experiences[key], PVR.settings.level))
+    .sort((a, b) => (PVR.experiences[a].group === 'Games' ? 0 : 1) - (PVR.experiences[b].group === 'Games' ? 0 : 1))
+    .map((key) => ({ id: key, label: PVR.experiences[key].title, caption: PVR.experiences[key].group.toUpperCase() })),
+  choose: switchTo,
   recentre: () => tracking.recentre(),
-  exit: () => { location.hash = ''; },
+  home: () => { location.hash = ''; },
   playAgain,
   canPlayAgain: () => state.experience === 'follow-the-circle' && game.phase === 'done',
 });
+
+// Goes from one activity straight to another without leaving VR.
+function switchTo(key) {
+  if (!PVR.experiences[key]) return;
+  state.experience = key;
+  history.replaceState(null, '', '#' + key); // so the address matches, without restarting the camera
+  playAgain();
+  targets.restart();
+}
 
 // Shows only the controls that work at this level, and runs hand tracking only when it is used.
 function fitControlsToLevel(level) {
@@ -101,7 +121,6 @@ function fitControlsToLevel(level) {
   for (const button of sideButtons) button.hidden = !buttons;
   if (level === 1) {
     hands.stop();
-    handMenu.close();
   } else {
     hands.start(level === 3 ? 2 : 1);
   }
@@ -121,27 +140,30 @@ if (view) {
     let seen = [];
     if (level > 1) {
       hands.update(now);
-      seen = hands.inView(now).map((hand) => ({ tip: place(hand.tip[0], hand.tip[1]), palm: place(hand.palm[0], hand.palm[1]) }));
+      seen = hands.inView(now).map((hand) => Object.assign({}, hand, { tip: place(hand.tip[0], hand.tip[1]), palm: place(hand.palm[0], hand.palm[1]) }));
     }
     const fingertips = seen.map((hand) => hand.tip);
 
+    // While the menu is open everything underneath stands still, so closing
+    // it puts you back exactly where you were.
+    const paused = menu.isOpen();
     if (state.experience === 'follow-the-circle') {
-      if (game.phase === 'waiting') plantStartCircle(orientation);
-      game.update(dt, orientation, tracking.frontYaw());
+      if (!paused) {
+        if (game.phase === 'waiting') plantStartCircle(orientation);
+        game.update(dt, orientation, tracking.frontYaw());
+      }
       if (game.phase !== 'done') playAgainButton.hidden = true;
       PVR.paintGame(ctx, width, height, focal, orientation, tracking.frontYaw(), game, state.bestShown);
     } else if (state.experience === 'pop-the-targets') {
-      targets.update(dt);
-      // While the hand menu is open, hands work the menu, not the targets.
-      PVR.paintTargets(ctx, width, height, focal, orientation, front, targets, level, handMenu.isOpen() ? [] : fingertips);
-    } else {
+      if (!paused) targets.update(dt);
+      PVR.paintTargets(ctx, width, height, focal, orientation, front, targets, level, paused ? [] : fingertips);
+    } else if (state.experience === 'see-your-room') {
       PVR.paintMarkers(ctx, width, height, focal, orientation, front);
     }
 
-    if (level > 1) {
-      handMenu.paint(ctx, width, height, fingertips, dt);
-      PVR.paintHands(ctx, width, height, seen, hands.status);
-    }
+    menu.paint(ctx, width, height, focal, orientation, { hands: seen, handsOn: level > 1, tap: state.tap }, dt);
+    state.tap = null;
+    if (level > 1) PVR.paintHands(ctx, width, height, seen, hands.status);
   });
 }
 
@@ -163,7 +185,7 @@ function showLevel() {
   for (const button of levelButtons) button.setAttribute('aria-pressed', Number(button.dataset.level) === level);
   for (const card of document.querySelectorAll('#home .card')) {
     const experience = PVR.experiences[card.getAttribute('href').slice(1)];
-    card.hidden = !!(experience && experience.levels && !experience.levels.includes(level));
+    card.hidden = !!(experience && !worksAt(experience, level));
   }
 }
 
@@ -176,6 +198,7 @@ const state = {
   experience: null,  // which experience is open: a key of PVR.experiences
   best: 0,           // best score in Follow the circle
   bestShown: 0,      // the best to show beside the current go
+  tap: null,         // where the picture was tapped since the last frame, for the floating menu
   planted: false,    // whether the circle that starts a go has been put in front of the player
 };
 state.best = state.bestShown = bestScore();
@@ -197,7 +220,7 @@ function route() {
   homeBest.textContent = 'Best score: ' + state.best;
   showLevel();
   const level = PVR.settings.level;
-  if (!experience || (experience.levels && !experience.levels.includes(level))) {
+  if (!experience || !worksAt(experience, level)) {
     state.experience = null;
     return show('home');
   }
@@ -327,7 +350,7 @@ function stopCamera() {
   panel.close();
   hands.stop();
   hands.retry();
-  handMenu.close();
+  menu.close();
   for (const button of sideButtons) button.hidden = true;
   playAgainButton.hidden = true;
   showNotice(null);
@@ -356,6 +379,7 @@ async function start(options) {
     targets.restart();
     lastFrame = performance.now();
     tracking.start();
+    if (state.experience === 'menu') menu.open(tracking.orientation());
     if (view) view.start();
     keepAwake();
   } catch (err) {
@@ -378,10 +402,14 @@ exitButton.addEventListener('click', () => { location.hash = ''; });
 recentreButton.addEventListener('click', () => tracking.recentre());
 playAgainButton.addEventListener('click', playAgain);
 for (const button of sideButtons) button.addEventListener('click', popAimed);
+document.getElementById('open-menu').addEventListener('click', () => {
+  if (menu.isOpen()) menu.close(); else menu.open(tracking.orientation());
+});
 for (const button of levelButtons) button.addEventListener('click', () => chooseLevel(Number(button.dataset.level)));
 document.getElementById('open-settings').addEventListener('click', () => panel.toggle());
 
-// One tap anywhere on the pictures opens or closes the settings.
+// One tap anywhere on the pictures opens or closes the settings. While the
+// floating menu is open, a tap chooses the tile under it instead.
 // With no motion sensor, dragging the picture (or the arrow keys) turns a pretend head.
 let drag = null;
 canvas.addEventListener('pointerdown', (event) => {
@@ -399,8 +427,10 @@ canvas.addEventListener('pointermove', (event) => {
   const perPixel = 0.7 / canvas.clientHeight; // about one picture height per 40 degrees
   tracking.look(-dx * perPixel, dy * perPixel);
 });
-canvas.addEventListener('pointerup', () => {
-  if (drag && drag.moved < 10) panel.toggle();
+canvas.addEventListener('pointerup', (event) => {
+  if (drag && drag.moved < 10) {
+    if (menu.isOpen() && view) state.tap = view.pointAt(event.clientX, event.clientY); else panel.toggle();
+  }
   drag = null;
 });
 canvas.addEventListener('pointercancel', () => { drag = null; });

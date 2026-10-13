@@ -206,6 +206,27 @@ html, body {
   border-radius: 10px;
 }
 
+.vr-menu-card { margin-top: 1.5rem; border-color: var(--accent); }
+
+/* Opens the floating menu: at the side of the screen, above the left thumb. */
+.menu-button {
+  position: absolute;
+  left: calc(.3rem + env(safe-area-inset-left));
+  top: calc(.5rem + env(safe-area-inset-top));
+  z-index: 3;
+  width: 4.4rem;
+  height: 2.6rem;
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, .6);
+  border: 2px solid rgba(255, 255, 255, .7);
+  border-radius: 12px;
+  touch-action: manipulation;
+}
+.menu-button:active { background: var(--accent); }
+
 /* Level 1: big action buttons at the sides of the screen, under the thumbs. */
 .side-button {
   position: absolute;
