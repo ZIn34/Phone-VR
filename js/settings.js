@@ -12,6 +12,7 @@ window.PVR = window.PVR || {};
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
     distance: 25,       // how far the phone is held from your face, in centimetres
     steps: true,        // real steps move you forward in games you can walk in
+    real: false,        // false: Simulation, only the game's own world. true: Real life, the game's things appear in your room
     lenses: false,      // false: window mode, one full-screen picture. true: headset view, two eye pictures for lenses
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
     size: 1,            // 1 = the picture is as tall as the screen
@@ -32,6 +33,7 @@ window.PVR = window.PVR || {};
 
   // Settings that are simply one thing or the other, with the words for each.
   PVR.settingToggles = [
+    { name: 'real', label: 'World', on: 'Real life', off: 'Simulation' },
     { name: 'steps', label: 'Walk by stepping', on: 'On', off: 'Off' },
   ];
 

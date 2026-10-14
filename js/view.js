@@ -24,6 +24,8 @@ window.PVR = window.PVR || {};
     precision highp float;
     uniform sampler2D uVideo;
     uniform sampler2D uOverlay;
+    uniform sampler2D uScene;
+    uniform float uSceneOn;     // 1 when a made-up scene is laid over the camera, else 0
     uniform vec2 uCentre;       // centre of this eye's picture, in canvas pixels
     uniform float uUnit;        // canvas pixels per scene unit
     uniform float uHalfWidth;   // half the picture's width, in scene units
@@ -39,6 +41,9 @@ window.PVR = window.PVR || {};
         return;
       }
       vec3 cam = texture2D(uVideo, 0.5 + s * uVideoScale).rgb;
+      // The scene covers the camera wherever it is solid, and lets it show where it is see-through.
+      vec4 world = texture2D(uScene, 0.5 + s * vec2(0.5 / uHalfWidth, 0.5));
+      cam = mix(cam, world.rgb, world.a * uSceneOn);
       vec4 over = texture2D(uOverlay, 0.5 + s * vec2(0.5 / uHalfWidth, 0.5));
       gl_FragColor = vec4(over.rgb + cam * (1.0 - over.a), 1.0);
     }`;
@@ -111,7 +116,7 @@ window.PVR = window.PVR || {};
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
     const uniform = {};
-    for (const name of ['uVideo', 'uOverlay', 'uCentre', 'uUnit', 'uHalfWidth', 'uVideoScale', 'uK']) {
+    for (const name of ['uVideo', 'uOverlay', 'uScene', 'uSceneOn', 'uCentre', 'uUnit', 'uHalfWidth', 'uVideoScale', 'uK']) {
       uniform[name] = gl.getUniformLocation(program, name);
     }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -128,17 +133,19 @@ window.PVR = window.PVR || {};
     let painter = null;
     let raf = 0;
 
-    // A scene is a made-up world drawn in place of the camera picture. It is
-    // drawn into its own picture first, then put on the screen like the camera.
+    // A scene is a made-up world. It is drawn into its own picture first, then
+    // laid over the camera picture: covering it completely, or (see-through)
+    // only where the scene has something to show.
     let scene = null;
     const target = { buffer: gl.createFramebuffer(), depth: gl.createRenderbuffer(), width: 0, height: 0 };
-    gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE2);
     const sceneTexture = makeTexture(gl);
+    gl.uniform1i(uniform.uScene, 2);
 
     function drawScene(eye, eyes, width, height, halfWidth, focal) {
       const w = Math.min(width, 1400);
       const h = Math.round(height * w / width);
-      gl.activeTexture(gl.TEXTURE0);
+      gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
       gl.bindFramebuffer(gl.FRAMEBUFFER, target.buffer);
       if (target.width !== w || target.height !== h) {
@@ -179,16 +186,21 @@ window.PVR = window.PVR || {};
       let cover = 1;
       let videoScale = [0, 0];
       if (vw && vh && video.readyState >= 2) {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, videoTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        // The camera picture is only copied across when some of it will be seen.
+        if (!scene || scene.seeThrough) {
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, videoTexture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        }
         // Fill the picture with the camera without stretching it; crop what spills over.
         cover = Math.max(layout.halfWidth / (vw / 2), 1 / (vh / 2));
         cover *= PVR.windowZoom(settings, canvas.clientHeight, cover * Math.max(vw, vh) / 2 / Math.tan(CAMERA_FOV / 2));
         videoScale = [1 / (cover * vw), 1 / (cover * vh)];
       }
 
-      let focal = scene ? scene.focal(settings, canvas.clientHeight) : 1;
+      // Scene units per unit of tan(angle). A see-through scene has to match the camera picture it lies over.
+      const cameraFocal = cover * (Math.max(vw, vh) || 2) / 2 / Math.tan(CAMERA_FOV / 2);
+      const focal = scene && !scene.seeThrough ? scene.focal(settings, canvas.clientHeight) : cameraFocal;
       if (painter) {
         const width = Math.round(layout.halfWidth * OVERLAY_HEIGHT);
         if (overlay.width !== width || overlay.height !== OVERLAY_HEIGHT) {
@@ -196,8 +208,6 @@ window.PVR = window.PVR || {};
           overlay.height = OVERLAY_HEIGHT;
         }
         overlayContext.clearRect(0, 0, width, OVERLAY_HEIGHT);
-        // Scene units per unit of tan(angle), so the painter can place things by direction.
-        focal = scene ? scene.focal(settings, canvas.clientHeight) : cover * (Math.max(vw, vh) || 2) / 2 / Math.tan(CAMERA_FOV / 2);
         // Where a point of the camera picture (as shares of its width and height) lands on the overlay.
         const unit = OVERLAY_HEIGHT / 2;
         const place = (u, v) => [width / 2 + (u - 0.5) * vw * cover * unit, unit - (0.5 - v) * vh * cover * unit];
@@ -211,12 +221,8 @@ window.PVR = window.PVR || {};
       gl.uniform1f(uniform.uUnit, layout.unit);
       gl.uniform1f(uniform.uHalfWidth, layout.halfWidth);
       gl.uniform2f(uniform.uK, k * 0.5, k * 0.2);
-      // A scene's picture covers exactly what is shown; the camera's is cropped to fit.
-      if (scene) gl.uniform2f(uniform.uVideoScale, 0.5 / layout.halfWidth, 0.5);
-      else gl.uniform2f(uniform.uVideoScale, videoScale[0], videoScale[1]);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, videoTexture);
+      gl.uniform2f(uniform.uVideoScale, videoScale[0], videoScale[1]);
+      gl.uniform1f(uniform.uSceneOn, scene ? 1 : 0);
       gl.enable(gl.SCISSOR_TEST);
       layout.eyes.forEach((eye, i) => {
         if (scene) drawScene(i, layout.eyes.length, eye.width, H, layout.halfWidth, focal);
@@ -231,7 +237,7 @@ window.PVR = window.PVR || {};
       start() { if (!raf) raf = requestAnimationFrame(frame); },
       stop() { cancelAnimationFrame(raf); raf = 0; },
       setPainter(fn) { painter = fn; },
-      // A made-up world to draw in place of the camera, or null for the camera.
+      // A made-up world to lay over the camera picture, or null for the camera alone.
       setScene(next) { scene = next; },
       gl,
     };

@@ -53,6 +53,7 @@ window.PVR = window.PVR || {};
   const FRAGMENT = `
     precision highp float;
     uniform vec3 uSky;
+    uniform float uSeeThrough;
     varying vec2 vUv;
     varying vec3 vColour;
     varying float vFar;
@@ -65,7 +66,9 @@ window.PVR = window.PVR || {};
       float edge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
       if (edge < 0.035) colour *= 0.78;
       // Far away fades into the sky, which also hides the edge of the world.
-      gl_FragColor = vec4(mix(colour, uSky, smoothstep(13.0, 24.0, vFar)), 1.0);
+      // Over the camera picture there is no sky, so far blocks fade away instead.
+      float haze = smoothstep(13.0, 24.0, vFar);
+      gl_FragColor = uSeeThrough > 0.5 ? vec4(colour, 1.0 - haze) : vec4(mix(colour, uSky, haze), 1.0);
     }`;
 
   const LINE_VERTEX = `
@@ -127,8 +130,9 @@ window.PVR = window.PVR || {};
     return new Float32Array(data);
   }
 
-  // gl is the view's own drawing context. Returns the scene the view draws in place of the camera.
-  PVR.createBlockScene = function (gl, world) {
+  // gl is the view's own drawing context. Returns the scene the view draws in
+  // place of the camera, or (see-through) on top of it.
+  PVR.createBlockScene = function (gl) {
     const blocks = program(gl, VERTEX, FRAGMENT);
     const lines = program(gl, LINE_VERTEX, LINE_FRAGMENT);
     const at = {
@@ -138,10 +142,12 @@ window.PVR = window.PVR || {};
       linePlace: gl.getAttribLocation(lines, 'aPlace'),
     };
     const lineBuffer = gl.createBuffer();
-    const pieces = {};          // "cx,cz" -> { buffer, vertices }
+    const piecesOf = new WeakMap(); // for each world: "cx,cz" -> { buffer, vertices }
     const SEE = 26;             // pieces further away than this are lost in the haze, so they are not drawn
 
     const scene = {
+      world: null,                // which world to draw
+      seeThrough: false,          // true: only the blocks are drawn, for laying over the camera picture
       orientation: [0, 0, 0, 1],  // which way the player is looking
       target: null,               // the block being aimed at, to outline
 
@@ -155,6 +161,9 @@ window.PVR = window.PVR || {};
 
       // eye: -1 left, +1 right, 0 for one picture. halfWidth: half the picture's width when its height is 2.
       render(eye, halfWidth, focal) {
+        const world = scene.world;
+        if (!piecesOf.has(world)) piecesOf.set(world, {});
+        const pieces = piecesOf.get(world);
         // Redraw the pieces that changed. Each is small, so building stays quick however big the world is.
         for (const key of world.dirty) {
           const [cx, cz] = key.split(',').map(Number);
@@ -185,13 +194,14 @@ window.PVR = window.PVR || {};
           px * dot(right), focal * dot(up), pz * dot(back) + pw, -dot(back),
         ]);
 
-        gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
+        if (scene.seeThrough) gl.clearColor(0, 0, 0, 0); else gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.enable(gl.DEPTH_TEST);
 
         gl.useProgram(blocks);
         gl.uniformMatrix4fv(gl.getUniformLocation(blocks, 'uCamera'), false, camera);
         gl.uniform3f(gl.getUniformLocation(blocks, 'uSky'), SKY[0], SKY[1], SKY[2]);
+        gl.uniform1f(gl.getUniformLocation(blocks, 'uSeeThrough'), scene.seeThrough ? 1 : 0);
         gl.enableVertexAttribArray(at.place);
         gl.enableVertexAttribArray(at.uv);
         gl.enableVertexAttribArray(at.colour);

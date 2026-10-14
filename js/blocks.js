@@ -49,6 +49,12 @@
       kind: 0,       // which of BUILD_WITH is in hand
       changed: 0,    // goes up every time a block changes
       chunk: CHUNK,
+      flat: !!flat,
+      // In a flat world the blocks stand in your room, so they are small (about
+      // 30 cm) and you are tall beside them. Elsewhere a block is about a metre.
+      body: flat
+        ? { eye: 5, tall: 5.2, reach: 14, speed: 5, stride: 2.3 }
+        : { eye: rules.eye, tall: rules.tall, reach: rules.reach, speed: rules.speed, stride: 0.8 },
       dirty: new Set(), // the pieces of the world whose drawing is out of date: "cx,cz"
     };
     const markAll = () => { for (let cx = 0; cx < SIZE / CHUNK; cx++) for (let cz = 0; cz < SIZE / CHUNK; cz++) world.dirty.add(cx + ',' + cz); };
@@ -117,7 +123,7 @@
       const w = rules.wide;
       for (const px of [x - w, x + w]) {
         for (const pz of [z - w, z + w]) {
-          for (let py = Math.floor(y + 0.001); py <= Math.floor(y + rules.tall - 0.001); py++) {
+          for (let py = Math.floor(y + 0.001); py <= Math.floor(y + world.body.tall - 0.001); py++) {
             if (world.solid(Math.floor(px), py, Math.floor(pz))) return true;
           }
         }
@@ -129,7 +135,7 @@
     // Follows a line from a point until it meets a block. Returns the block it
     // met and the empty place just before it, or null if nothing is in reach.
     world.aim = function (from, direction, reach) {
-      const far = reach || rules.reach;
+      const far = reach || world.body.reach;
       let x = Math.floor(from[0]), y = Math.floor(from[1]), z = Math.floor(from[2]);
       const step = direction.map((d) => (d > 0 ? 1 : -1));
       const each = direction.map((d) => (d === 0 ? Infinity : Math.abs(1 / d)));          // distance between grid lines along the ray
@@ -187,8 +193,8 @@
       const p = world.player;
       if (walk) {
         const length = Math.hypot(walk[0], walk[1]) || 1;
-        const dx = walk[0] / length * rules.speed * dt;
-        const dz = walk[1] / length * rules.speed * dt;
+        const dx = walk[0] / length * world.body.speed * dt;
+        const dz = walk[1] / length * world.body.speed * dt;
         const low = rules.edge, high = SIZE - rules.edge;
         const go = (x, z) => {
           x = Math.max(low, Math.min(high, x));
@@ -216,7 +222,7 @@
       p.y = y;
     };
 
-    world.eyes = () => [world.player.x, world.player.y + rules.eye, world.player.z];
+    world.eyes = () => [world.player.x, world.player.y + world.body.eye, world.player.z];
 
     // What to keep between visits: only what the player changed, and where they are.
     world.save = function () {

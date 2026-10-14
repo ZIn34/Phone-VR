@@ -94,15 +94,25 @@ const hands = PVR.createHands(video);
 // Block world. What you build is kept on this phone.
 const WORLD_KEY = 'phone-vr.block-world.v2'; // v2: the bigger world; builds from the small one could not be carried over
 const WORLD_SEED = 20261013;
-const world = PVR.blocks.createWorld(WORLD_SEED);
-try {
-  world.load(localStorage.getItem(WORLD_KEY));
-} catch (err) {
-  // Nothing saved, or nowhere to save: start with the fresh world.
+// Two worlds, each saved on its own: the made-up land for Simulation, and a
+// bare floor for Real life, where what you build stands in your room.
+const worlds = {
+  sim: Object.assign(PVR.blocks.createWorld(WORLD_SEED), { key: WORLD_KEY }),
+  real: Object.assign(PVR.blocks.createWorld(WORLD_SEED + 1, true), { key: WORLD_KEY + '.room' }),
+};
+for (const name in worlds) {
+  worlds[name].savedAt = -1;
+  worlds[name].savedTime = 0;
+  try {
+    worlds[name].load(localStorage.getItem(worlds[name].key));
+  } catch (err) {
+    // Nothing saved, or nowhere to save: start with the fresh world.
+  }
 }
+let world = worlds.sim; // the one in use; follows the Real life / Simulation setting
 let blockScene = null;
 try {
-  if (view) blockScene = PVR.createBlockScene(view.gl, world);
+  if (view) blockScene = PVR.createBlockScene(view.gl);
 } catch (err) {
   blockScene = null;
 }
@@ -126,14 +136,14 @@ const hotbarSlots = PVR.blocks.BUILD_WITH.map((kind, i) => {
 
 // Real steps, felt by the phone's motion sensor, walk you forward.
 const stepCounter = PVR.steps.createStepCounter();
-const STRIDE = 0.8; // blocks walked for each real step
 window.addEventListener('devicemotion', (event) => {
   if (!PVR.settings.steps || !walkable() || menu.isOpen()) return;
   const a = event.accelerationIncludingGravity;
   if (!a || a.x === null) return;
   const r = event.rotationRate || {};
   const turn = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
-  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + STRIDE, STRIDE * 3);
+  // Each real step walks one stride; a few can queue up, no more.
+  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + world.body.stride, world.body.stride * 3);
 });
 
 // Whether you are somewhere you can walk about in.
@@ -149,17 +159,15 @@ const blockPlay = {
   over: null,         // which in-view hand button a fingertip is on
   held: 0,
   pinching: [],
-  savedAt: -1,
-  savedTime: 0,
 };
 
 // Keeps the world: straight away when a block changes, and every few seconds for where you are standing.
 function saveWorld(now) {
-  if (blockPlay.savedAt === world.changed && now - blockPlay.savedTime < 3000) return;
-  blockPlay.savedAt = world.changed;
-  blockPlay.savedTime = now;
+  if (world.savedAt === world.changed && now - world.savedTime < 3000) return;
+  world.savedAt = world.changed;
+  world.savedTime = now;
   try {
-    localStorage.setItem(WORLD_KEY, world.save());
+    localStorage.setItem(world.key, world.save());
   } catch (err) {
     // Nowhere to keep it: it still works until the page is closed.
   }
@@ -182,7 +190,7 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
   // Real steps already taken are walked off a little each frame.
   if (blockPlay.stride > 0 && !paused) {
     walk = true;
-    blockPlay.stride = Math.max(0, blockPlay.stride - PVR.blocks.rules.speed * dt);
+    blockPlay.stride = Math.max(0, blockPlay.stride - world.body.speed * dt);
   }
   let aimPoint = [width / 2, height / 2];
   blockPlay.over = null;
@@ -291,6 +299,12 @@ function fitControls(level, now) {
   // If hand tracking cannot start, the side buttons take over so nobody is stuck.
   const buttons = level === 1 || hands.status === 'failed';
   const label = menu.isOpen() ? 'SELECT' : (state.experience === 'pop-the-targets' ? 'POP' : '');
+  // Real life or Simulation: which block world is in use, and whether the camera shows behind it.
+  world = PVR.settings.real ? worlds.real : worlds.sim;
+  if (blockScene) {
+    blockScene.world = world;
+    blockScene.seeThrough = PVR.settings.real;
+  }
   const inBlocks = state.experience === 'block-world' && !!blockScene && !menu.isOpen();
   for (const key in blockButtons) blockButtons[key].hidden = !(buttons && inBlocks);
   hotbar.hidden = !inBlocks;
@@ -328,6 +342,10 @@ if (view) {
     // While the menu is open everything underneath stands still, so closing
     // it puts you back exactly where you were.
     const paused = menu.isOpen();
+    // Simulation: these two have no world of their own, so a plain sky and ground stands in for your room.
+    if (!PVR.settings.real && (state.experience === 'follow-the-circle' || state.experience === 'pop-the-targets')) {
+      PVR.paintBackdrop(ctx, width, height, focal, orientation);
+    }
     if (state.experience === 'follow-the-circle') {
       if (!paused) {
         if (game.phase === 'waiting') plantStartCircle(orientation);
