@@ -393,7 +393,10 @@ window.PVR = window.PVR || {};
             text(ctx, t.caption, x, y - tall * 0.24, Math.max(10, tall * 0.13), '#9aa3b5');
             text(ctx, t.label, x, y + tall * 0.12, Math.max(13, tall * 0.2));
           } else {
-            text(ctx, t.label, x, y, t.label.length <= 1 ? tall * 0.6 : Math.max(13, tall * (t.line ? 0.34 : 0.22)));
+            // Long words are made small enough to fit across the tile.
+            const wide = Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]);
+            const fits = wide / (t.label.length * 0.58);
+            text(ctx, t.label, x, y, t.label.length <= 1 ? tall * 0.6 : Math.max(11, Math.min(fits, tall * (t.line ? 0.34 : 0.22))));
           }
         }
 
