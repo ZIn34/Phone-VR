@@ -256,6 +256,30 @@ html, body {
 .side-button.right { right: calc(.3rem + env(safe-area-inset-right)); }
 .side-button:active { background: #3dffb0; color: #000; }
 
+/* Block world, Level 1: walk under the left thumb, build and break under the right. */
+.block-button {
+  position: absolute;
+  z-index: 3;
+  width: 4.6rem;
+  height: 4.2rem;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, .45);
+  border: 2px solid rgba(255, 255, 255, .7);
+  border-radius: 16px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.block-button.walk { left: calc(.3rem + env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); height: 6.5rem; }
+.block-button.build { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% - 4.4rem); }
+.block-button.break { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% + .2rem); }
+.block-button.kind { right: calc(.3rem + env(safe-area-inset-right)); top: calc(.5rem + env(safe-area-inset-top)); height: 2.6rem; font-weight: 600; }
+.block-button:active, .block-button.held { background: rgba(79, 140, 255, .8); }
+
 /* Buttons at the bottom middle, between the lenses, where thumbs can reach. */
 .vr-bar {
   position: absolute;

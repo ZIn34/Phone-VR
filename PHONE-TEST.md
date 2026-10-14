@@ -13,8 +13,8 @@ Link: https://zin34.github.io/Phone-VR/ (the capitals matter).
 2. Tap **Start**. Allow **motion**, then the **camera**.
 3. Turn the phone sideways and hold it up to your eyes.
 
-Works if: you see your room twice, side by side, from the back camera, with
-the home menu's tiles floating in front of you.
+Works if: you see one big picture of your room from the back camera, with the
+home menu's tiles floating in it.
 
 To hide Safari's bars: Share, then Add to Home Screen, and open it from there.
 
@@ -35,17 +35,34 @@ Works if: looking alone never chooses; SELECT chooses the tile under the cross.
 
 Please tell me: too easy or too hard, too fast at the end, comfortable or not.
 
+## 3b. Block world
+
+1. From the home menu choose **Block world**. Your room should be gone: you
+   are standing among blocks, with sky above.
+2. Turn all the way round and look up and down.
+3. Level 1: hold **WALK** (left thumb) to walk the way you are looking. Aim the
+   cross at a block: it gets a white outline. Tap **BUILD** or **BREAK** (right
+   thumb). The button at the top right changes which block you build with.
+4. Levels 2 and 3: point at a block and pinch to build. Rest a fingertip on
+   the BUILD button in the view to switch to BREAK, and on WALK to walk.
+5. Leave and come back: what you built should still be there.
+
+Please tell me: is it smooth as you look around, is walking too fast or slow,
+and are the buttons where your thumbs want them.
+
 ## 4. Head tracking and eye fit
 
 1. From the home menu choose **See your room**. The buttons stay on screen here.
 2. Turn left: FRONT should slide right. Look up: the horizon should move down.
 3. Line the white cross up with a door frame, look around for a minute, look
    back. The same green post should still be on it. If not, tap **Re-centre**.
-4. Tap the screen, or **Settings**, and adjust Eye distance, Picture size,
-   Up / down and Lens correction until the two pictures merge comfortably.
+4. Tap the screen, or **Settings**, and change **Distance from face** until a
+   doorway on the phone is about the same size as the real one around it.
+5. Only if you use a holder with lenses: turn on **Lens holder** for two
+   pictures, then adjust Eye distance, Picture size and Lens correction.
 
-Please tell me: the eye-fit numbers you ended up with, and whether the green
-posts stay glued to real objects as you turn.
+Please tell me: the distance you ended up with, and whether the green posts
+stay glued to real objects as you turn.
 
 ## 5. Levels 2 and 3 (hands)
 

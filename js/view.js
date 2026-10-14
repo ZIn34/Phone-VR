@@ -103,7 +103,8 @@ window.PVR = window.PVR || {};
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     const aPos = gl.getAttribLocation(program, 'aPos');
     gl.enableVertexAttribArray(aPos);
@@ -126,6 +127,40 @@ window.PVR = window.PVR || {};
     const overlayContext = overlay.getContext('2d');
     let painter = null;
     let raf = 0;
+
+    // A scene is a made-up world drawn in place of the camera picture. It is
+    // drawn into its own picture first, then put on the screen like the camera.
+    let scene = null;
+    const target = { buffer: gl.createFramebuffer(), depth: gl.createRenderbuffer(), width: 0, height: 0 };
+    gl.activeTexture(gl.TEXTURE0);
+    const sceneTexture = makeTexture(gl);
+
+    function drawScene(eye, eyes, width, height, halfWidth, focal) {
+      const w = Math.min(width, 1400);
+      const h = Math.round(height * w / width);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.buffer);
+      if (target.width !== w || target.height !== h) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTexture, 0);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, target.depth);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, target.depth);
+        target.width = w;
+        target.height = h;
+      }
+      gl.disable(gl.SCISSOR_TEST);
+      gl.viewport(0, 0, w, h);
+      scene.render(eyes === 1 ? 0 : (eye === 0 ? -1 : 1), halfWidth, focal);
+      // Back to drawing on the screen, with everything this file relies on put back.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.useProgram(program);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.enable(gl.SCISSOR_TEST);
+    }
 
     function frame() {
       raf = requestAnimationFrame(frame);
@@ -153,6 +188,7 @@ window.PVR = window.PVR || {};
         videoScale = [1 / (cover * vw), 1 / (cover * vh)];
       }
 
+      let focal = scene ? scene.focal(settings, canvas.clientHeight) : 1;
       if (painter) {
         const width = Math.round(layout.halfWidth * OVERLAY_HEIGHT);
         if (overlay.width !== width || overlay.height !== OVERLAY_HEIGHT) {
@@ -161,7 +197,7 @@ window.PVR = window.PVR || {};
         }
         overlayContext.clearRect(0, 0, width, OVERLAY_HEIGHT);
         // Scene units per unit of tan(angle), so the painter can place things by direction.
-        const focal = cover * (Math.max(vw, vh) || 2) / 2 / Math.tan(CAMERA_FOV / 2);
+        focal = scene ? scene.focal(settings, canvas.clientHeight) : cover * (Math.max(vw, vh) || 2) / 2 / Math.tan(CAMERA_FOV / 2);
         // Where a point of the camera picture (as shares of its width and height) lands on the overlay.
         const unit = OVERLAY_HEIGHT / 2;
         const place = (u, v) => [width / 2 + (u - 0.5) * vw * cover * unit, unit - (0.5 - v) * vh * cover * unit];
@@ -174,22 +210,30 @@ window.PVR = window.PVR || {};
       const k = layout.curve;
       gl.uniform1f(uniform.uUnit, layout.unit);
       gl.uniform1f(uniform.uHalfWidth, layout.halfWidth);
-      gl.uniform2f(uniform.uVideoScale, videoScale[0], videoScale[1]);
       gl.uniform2f(uniform.uK, k * 0.5, k * 0.2);
+      // A scene's picture covers exactly what is shown; the camera's is cropped to fit.
+      if (scene) gl.uniform2f(uniform.uVideoScale, 0.5 / layout.halfWidth, 0.5);
+      else gl.uniform2f(uniform.uVideoScale, videoScale[0], videoScale[1]);
 
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, videoTexture);
       gl.enable(gl.SCISSOR_TEST);
-      for (const eye of layout.eyes) {
+      layout.eyes.forEach((eye, i) => {
+        if (scene) drawScene(i, layout.eyes.length, eye.width, H, layout.halfWidth, focal);
         gl.viewport(eye.left, 0, eye.width, H);
         gl.scissor(eye.left, 0, eye.width, H);
         gl.uniform2f(uniform.uCentre, eye.x, eye.y);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      }
+      });
     }
 
     return {
       start() { if (!raf) raf = requestAnimationFrame(frame); },
       stop() { cancelAnimationFrame(raf); raf = 0; },
       setPainter(fn) { painter = fn; },
+      // A made-up world to draw in place of the camera, or null for the camera.
+      setScene(next) { scene = next; },
+      gl,
     };
   };
 })(window.PVR);

@@ -90,6 +90,112 @@ function plantStartCircle(orientation) {
 const targets = PVR.targets.createTargets(Date.now());
 const hands = PVR.createHands(video);
 
+// Block world. What you build is kept on this phone.
+const WORLD_KEY = 'phone-vr.block-world.v1';
+const WORLD_SEED = 20261013;
+const world = PVR.blocks.createWorld(WORLD_SEED);
+try {
+  world.load(localStorage.getItem(WORLD_KEY));
+} catch (err) {
+  // Nothing saved, or nowhere to save: start with the fresh world.
+}
+let blockScene = null;
+try {
+  if (view) blockScene = PVR.createBlockScene(view.gl, world);
+} catch (err) {
+  blockScene = null;
+}
+const blockButtons = {
+  walk: document.getElementById('b-walk'),
+  build: document.getElementById('b-build'),
+  dig: document.getElementById('b-break'),
+  kind: document.getElementById('b-kind'),
+};
+const blockPlay = {
+  walking: false,     // the WALK button is held
+  building: true,     // at Levels 2 and 3: whether a pinch builds or breaks
+  over: null,         // which in-view hand button a fingertip is on
+  held: 0,
+  pinching: [],
+  savedAt: -1,
+  savedTime: 0,
+};
+
+// Keeps the world: straight away when a block changes, and every few seconds for where you are standing.
+function saveWorld(now) {
+  if (blockPlay.savedAt === world.changed && now - blockPlay.savedTime < 3000) return;
+  blockPlay.savedAt = world.changed;
+  blockPlay.savedTime = now;
+  try {
+    localStorage.setItem(WORLD_KEY, world.save());
+  } catch (err) {
+    // Nowhere to keep it: it still works until the page is closed.
+  }
+}
+
+// Which way a point of the picture looks, out in the world.
+function lookThrough(orientation, focal, width, height, point) {
+  const unit = height / 2;
+  const x = (point[0] - width / 2) / unit / focal;
+  const y = (height / 2 - point[1]) / unit / focal;
+  const length = Math.hypot(x, y, 1);
+  return PVR.math.rotate(orientation, [x / length, y / length, -1 / length]);
+}
+
+// One frame of Block world. Returns what the painter needs to draw over it.
+function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused) {
+  const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
+  let walk = blockPlay.walking;
+  let aimPoint = [width / 2, height / 2];
+  blockPlay.over = null;
+
+  if (handsOn && !paused) {
+    // Hands: rest a fingertip on a button in the view; pinch on a block to build or break.
+    const buttons = PVR.blockHandButtons(width, height);
+    const tips = seen.map((hand) => hand.tip);
+    const on = buttons.find((b) => tips.some((t) => t[0] >= b.x && t[0] <= b.x + b.w && t[1] >= b.y && t[1] <= b.y + b.h));
+    if (on) {
+      blockPlay.over = on.id;
+      if (on.id === 'walk') {
+        walk = true;
+      } else {
+        blockPlay.held += dt / 0.8;
+        if (blockPlay.held >= 1) {
+          if (on.id === 'mode') blockPlay.building = !blockPlay.building; else world.nextKind();
+          blockPlay.held = -0.6; // a pause before it can go again
+        }
+      }
+    } else {
+      blockPlay.held = 0;
+    }
+    const pointer = seen.find((hand) => !buttons.some((b) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h));
+    aimPoint = pointer ? pointer.tip : null;
+    seen.forEach((hand, i) => {
+      const was = !!blockPlay.pinching[i];
+      blockPlay.pinching[i] = hand.pinch < 0.22 || (was && hand.pinch < 0.32);
+      if (blockPlay.pinching[i] && !was && hand === pointer) {
+        const target = world.aim(world.eyes(), lookThrough(orientation, focal, width, height, hand.tip));
+        if (blockPlay.building) world.build(target); else world.dig(target);
+      }
+    });
+    blockPlay.pinching.length = seen.length;
+  }
+
+  if (!paused) world.update(dt, walk ? [ahead[0], ahead[2]] : null);
+  const target = aimPoint ? world.aim(world.eyes(), lookThrough(orientation, focal, width, height, aimPoint)) : null;
+  blockScene.orientation = orientation;
+  blockScene.target = paused ? null : target;
+  saveWorld(performance.now());
+  return { handsOn, building: blockPlay.building, over: blockPlay.over, held: Math.max(0, blockPlay.held) };
+}
+
+// Level 1: BUILD and BREAK act on the block under the cross. Looking alone does nothing.
+function blockAct(build) {
+  if (state.experience !== 'block-world' || menu.isOpen()) return;
+  const target = world.aim(world.eyes(), PVR.math.rotate(tracking.orientation(), [0, 0, -1]));
+  if (build) world.build(target); else world.dig(target);
+}
+
 // The floating menu lists what works at the current level.
 function worksAt(experience, level) {
   return !experience.levels || experience.levels.includes(level);
@@ -138,6 +244,11 @@ function fitControls(level, now) {
   // If hand tracking cannot start, the side buttons take over so nobody is stuck.
   const buttons = level === 1 || hands.status === 'failed';
   const label = menu.isOpen() ? 'SELECT' : (state.experience === 'pop-the-targets' ? 'POP' : '');
+  const inBlocks = state.experience === 'block-world' && !!blockScene && !menu.isOpen();
+  for (const key in blockButtons) blockButtons[key].hidden = !(buttons && inBlocks);
+  blockButtons.kind.textContent = world.kindName();
+  if (!inBlocks) blockPlay.walking = false;
+  if (view) view.setScene(state.experience === 'block-world' ? blockScene : null);
   for (const button of sideButtons) {
     button.hidden = !(buttons && label);
     if (label) button.textContent = label;
@@ -179,6 +290,8 @@ if (view) {
     } else if (state.experience === 'pop-the-targets') {
       if (!paused) targets.update(dt);
       PVR.paintTargets(ctx, width, height, focal, orientation, front, targets, buttons ? 1 : level, paused ? [] : fingertips);
+    } else if (state.experience === 'block-world' && blockScene) {
+      PVR.paintBlocks(ctx, width, height, world, playBlocks(dt, orientation, focal, width, height, seen, !buttons, paused));
     } else if (state.experience === 'see-your-room') {
       PVR.paintMarkers(ctx, width, height, focal, orientation, front);
     }
@@ -410,6 +523,18 @@ exitButton.addEventListener('click', () => { if (state.experience === HOME) rout
 recentreButton.addEventListener('click', () => tracking.recentre());
 playAgainButton.addEventListener('click', playAgain);
 for (const button of sideButtons) button.addEventListener('click', sidePress);
+
+// Block world: WALK works while it is held; the others act once for each tap.
+for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']) {
+  blockButtons.walk.addEventListener(type, (event) => {
+    blockPlay.walking = type === 'pointerdown';
+    blockButtons.walk.classList.toggle('held', blockPlay.walking);
+    event.preventDefault();
+  });
+}
+blockButtons.build.addEventListener('click', () => blockAct(true));
+blockButtons.dig.addEventListener('click', () => blockAct(false));
+blockButtons.kind.addEventListener('click', () => world.nextKind());
 document.getElementById('open-menu').addEventListener('click', () => {
   if (!menu.isOpen()) menu.open(tracking.orientation()); else if (state.experience !== HOME) menu.close();
 });
