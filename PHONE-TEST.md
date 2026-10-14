@@ -65,14 +65,11 @@ too long or too short.
 2. Turn left: FRONT should slide right. Look up: the horizon should move down.
 3. Line the white cross up with a door frame, look around for a minute, look
    back. The same green post should still be on it. If not, tap **Re-centre**.
-4. Tap the screen, or **Settings**, and change **Distance from face** until a
-   doorway on the phone is about the same size as the real one around it.
-5. Only if you ever get a holder with lenses: in the menu's Testing section
+4. Only if you ever get a holder with lenses: in the menu's Testing section
    choose **Headset view** for two pictures. Settings then also shows Eye
    distance, Picture size and Lens correction.
 
-Please tell me: the distance you ended up with, and whether the green posts
-stay glued to real objects as you turn.
+Please tell me: whether the green posts stay glued to real objects as you turn.
 
 ## 5. Levels 2 and 3 (hands)
 

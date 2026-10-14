@@ -156,7 +156,7 @@ window.PVR = window.PVR || {};
       focal(settings, screenHeightPx) {
         if (settings.lenses) return 1.2;
         const screenHeightCm = screenHeightPx / (160 / 2.54);
-        return Math.max(1.2, Math.min(2.6, 0.45 * 2 * settings.distance / screenHeightCm));
+        return Math.max(1.2, Math.min(2.6, 0.45 * 2 * 10 / screenHeightCm)); // sized for a phone held about 10 cm away: a wide view
       },
 
       // eye: -1 left, +1 right, 0 for one picture. halfWidth: half the picture's width when its height is 2.

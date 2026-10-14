@@ -10,6 +10,7 @@ window.PVR = window.PVR || {};
 (function (PVR) {
   const OVERLAY_HEIGHT = 640;
   const PIXELS_PER_CM = 160 / 2.54; // a web page cannot measure the screen; phones are close to this
+  const HELD_AT = 10;               // cm from your face the picture is sized for: the widest, least zoomed view
   const MAX_ZOOM = 3;               // beyond this the camera picture is too blurry to be useful
 
   // Roughly how wide a phone's main back camera sees along the long side of a
@@ -86,13 +87,14 @@ window.PVR = window.PVR || {};
     };
   };
 
-  // How much to zoom the one big picture so that it works like a window: what
-  // you see on the phone is the size it would be if the phone were a hole at
-  // that distance from your face. focal is the picture's scale with no zoom.
+  // How much to zoom the one big picture so that it works like a window held
+  // close: what you see on the phone is about the size it would be if the
+  // phone were a hole HELD_AT cm from your face. focal is the picture's scale
+  // with no zoom.
   PVR.windowZoom = function (settings, screenHeightPx, focal) {
     if (settings.lenses) return 1;
     const screenHeightCm = screenHeightPx / PIXELS_PER_CM;
-    const windowFocal = 2 * settings.distance / screenHeightCm;
+    const windowFocal = 2 * HELD_AT / screenHeightCm;
     return Math.max(1, Math.min(MAX_ZOOM, windowFocal / focal));
   };
 

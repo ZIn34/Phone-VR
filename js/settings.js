@@ -1,6 +1,6 @@
 'use strict';
 
-// Settings: how you play and how far the phone is from your face. In headset
+// Settings: how you play, and which kind of world. In headset
 // view (two pictures, for lenses) also where and how big the eye pictures are.
 // They are kept on this phone so they are still there next time.
 window.PVR = window.PVR || {};
@@ -10,7 +10,6 @@ window.PVR = window.PVR || {};
 
   PVR.defaultSettings = {
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
-    distance: 25,       // how far the phone is held from your face, in centimetres
     steps: true,        // real steps move you forward in games you can walk in
     real: false,        // false: Simulation, only the game's own world. true: Real life, the game's things appear in your room
     lenses: false,      // false: window mode, one full-screen picture. true: headset view, two eye pictures for lenses
@@ -24,7 +23,6 @@ window.PVR = window.PVR || {};
   // Lowest value, highest value, and how much one press of - or + changes it.
   PVR.settingLimits = {
     level: { min: 1, max: 3, step: 1 },
-    distance: { min: 10, max: 50, step: 5 },
     separation: { min: 0.3, max: 0.7, step: 0.01 },
     size: { min: 0.5, max: 1.5, step: 0.02 },
     offsetY: { min: -0.25, max: 0.25, step: 0.01 },

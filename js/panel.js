@@ -9,7 +9,6 @@ window.PVR = window.PVR || {};
   // lenses: true = only shown in headset view (two pictures, for lenses), false = only shown in window mode.
   const ROWS = [
     { name: 'level', label: 'How you play', less: 'Lower level', more: 'Higher level', show: (value) => 'Level ' + value },
-    { name: 'distance', label: 'Distance from face', less: 'Closer', more: 'Further', show: (value) => value + ' cm', lenses: false },
     { name: 'separation', label: 'Eye distance', less: 'Closer together', more: 'Further apart', show: percent, lenses: true },
     { name: 'size', label: 'Picture size', less: 'Smaller', more: 'Bigger', show: percent, lenses: true },
     {
