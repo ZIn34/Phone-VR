@@ -2,25 +2,26 @@
 
 // The floating menu: tiles that hang in the room in front of you, in both eyes.
 // It stays where it was opened, so you turn your head to look across it.
+// It is the home of the whole thing: after Start you are always in it until
+// you choose something, and Home brings you back to it.
 //
-// Ways to open it: the MENU button at the side of the screen, looking down at
-// the MENU disc near your feet, or (Levels 2 and 3) showing the camera an open
-// palm, or resting a fingertip on the MENU button in the view.
-// Ways to choose a tile: look at it for a second, tap it, pinch on it, or rest
-// a fingertip on it.
+// Looking at a tile never chooses it. How you choose depends on how you play:
+//   Level 1: aim the cross in the middle of the view at a tile and press a
+//            SELECT button at the side of the screen.
+//   Levels 2 and 3: point at a tile and pinch, or hold your fingertip on it.
+// To open it from inside an activity: the MENU button at the side of the
+// screen, or (Levels 2 and 3) show the camera an open palm, or hold a
+// fingertip on the MENU button in the view.
 window.PVR = window.PVR || {};
 
 (function (PVR) {
   const math = PVR.math;
   const RAD = Math.PI / 180;
-  const LOOK = 1.0;          // seconds of steady looking that chooses a tile
   const REST = 0.9;          // seconds a fingertip rests on a tile to choose it
   const AGAIN = 0.45;        // seconds between repeats on - and +
   const PINCH = 0.22;        // thumb and finger this close (against hand size) is a pinch...
   const UNPINCH = 0.32;      // ...and this far apart lets go
   const PALM = 0.8;          // seconds an open palm is shown to open the menu
-  const DOWN = -32 * RAD;    // where the look-down MENU disc sits
-  const DOWN_SIZE = 5 * RAD;
   const TILE_W = 12 * RAD;
   const TILE_H = 6.5 * RAD;
   const GAP = 1.5 * RAD;
@@ -59,14 +60,13 @@ window.PVR = window.PVR || {};
     let screen = 'closed';      // 'closed' | 'main' | 'fit'
     let anchorYaw = 0;          // where the menu hangs in the room
     let anchorPitch = 0;
-    // blocked: the tile a pointer was already on when a screen appeared. It
-    // does not count until the pointer has moved off it, so nothing is chosen
+    // blocked: the tile a fingertip was already on when a screen appeared. It
+    // does not count until the fingertip has moved off it, so nothing is chosen
     // by accident. undefined = not looked at yet since the screen appeared.
-    const gaze = { id: null, time: 0, done: false, blocked: undefined };
     const rest = { id: null, time: 0, done: false, blocked: undefined };
+    let atHome = false;         // at the home menu, which cannot be closed
     let pinching = [];          // per hand: is it pinching right now
     let palmTime = 0;
-    let downTime = 0;
     let restOpen = 0;
 
     function change(name, direction) {
@@ -76,16 +76,16 @@ window.PVR = window.PVR || {};
 
     function show(next) {
       screen = next;
-      gaze.id = rest.id = null;
-      gaze.time = rest.time = 0;
-      gaze.blocked = rest.blocked = undefined;
+      rest.id = null;
+      rest.time = 0;
+      rest.blocked = undefined;
     }
 
     function open(orientation) {
       anchorYaw = math.yawOf(orientation);
       // A little below where you are looking, but never down at the floor or up at the ceiling.
       anchorPitch = Math.max(-12 * RAD, Math.min(10 * RAD, math.pitchOf(orientation) - 4 * RAD));
-      palmTime = downTime = restOpen = 0;
+      palmTime = restOpen = 0;
       show('main');
     }
 
@@ -99,14 +99,19 @@ window.PVR = window.PVR || {};
         for (let i = 0; i < activities.length; i += 3) {
           rows.push(activities.slice(i, i + 3).map((a) => [a.id, a.label, a.caption, () => { actions.choose(a.id); show('closed'); }]));
         }
-        rows.push([
+        const row = [
           ['fit', 'Settings', 'EYE FIT AND LEVEL', () => show('fit')],
           ['recentre', 'Re-centre', '', () => actions.recentre()],
-          ['home', 'Home', 'LEAVE VR', () => actions.home()],
-        ]);
-        const last = [['close', 'Close menu', '', () => show('closed')]];
-        if (actions.canPlayAgain()) last.unshift(['again', 'Play again', '', () => { actions.playAgain(); show('closed'); }]);
-        rows.push(last);
+        ];
+        // At home there is nowhere to go back to, and nothing to close.
+        if (!atHome) {
+          row.push(['home', 'Home', 'BACK TO THIS MENU', () => actions.home()]);
+          const last = [['close', 'Close menu', '', () => show('closed')]];
+          if (actions.canPlayAgain()) last.unshift(['again', 'Play again', '', () => { actions.playAgain(); show('closed'); }]);
+          rows.push(row, last);
+        } else {
+          rows.push(row);
+        }
         const step = TILE_H + GAP;
         rows.forEach((row, r) => {
           const y = ((rows.length - 1) / 2 - r) * step;
@@ -166,9 +171,11 @@ window.PVR = window.PVR || {};
       close() { show('closed'); },
 
       // input: {
-      //   hands: [{ tip: [x, y], pinch, open, palmUp }] in canvas pixels; empty at Level 1
-      //   handsOn: true at Levels 2 and 3
-      //   tap: [x, y] where the screen was tapped this frame, in canvas pixels, or null
+      //   hands: [{ tip: [x, y], pinch, open, palmUp }] in canvas pixels; empty when hands are not used
+      //   handsOn: true when hands do the choosing (Levels 2 and 3)
+      //   select: true on the frame a SELECT button at the side was pressed
+      //   home: true at the home menu, which is always open
+      //   quiet: true while playing a game, when nothing extra should sit in the view
       // }
       paint(ctx, width, height, focal, orientation, input, dt) {
         const unit = height / 2;
@@ -189,32 +196,10 @@ window.PVR = window.PVR || {};
         });
         pinching.length = input.hands.length;
 
-        if (screen === 'closed') {
-          // Look down: a MENU disc below wherever you are facing.
-          const yaw = math.yawOf(orientation);
-          const onDisc = Math.abs(math.pitchOf(orientation) - DOWN) < DOWN_SIZE;
-          downTime = onDisc ? downTime + dt : 0;
-          const disc = spot(yaw, DOWN);
-          if (disc) {
-            const radius = focal * Math.tan(DOWN_SIZE) * unit;
-            ctx.beginPath();
-            ctx.arc(disc[0], disc[1], radius, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(11, 13, 18, .6)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 255, 255, .7)';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            if (downTime > 0) {
-              ctx.beginPath();
-              ctx.arc(disc[0], disc[1], radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, downTime / LOOK));
-              ctx.strokeStyle = '#3dffb0';
-              ctx.lineWidth = 7;
-              ctx.stroke();
-            }
-            text(ctx, 'MENU', disc[0], disc[1], 22);
-          }
+        atHome = !!input.home;
+        if (screen === 'closed' && atHome) open(orientation);
 
-          let handOpen = false;
+        if (screen === 'closed') {
           if (input.handsOn) {
             // An open palm shown to the camera.
             const palm = input.hands.find((hand) => hand.open && hand.palmUp);
@@ -227,6 +212,8 @@ window.PVR = window.PVR || {};
               ctx.stroke();
               text(ctx, 'MENU', palm.palm[0], palm.palm[1], 20);
             }
+          }
+          if (input.handsOn && !input.quiet) {
             // A MENU button fixed at the right of the view, pressed by resting a fingertip on it.
             const b = { x: width * 0.86 - 44, y: height / 2 - 30, w: 88, h: 60 };
             const on = input.hands.some((hand) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h);
@@ -246,9 +233,10 @@ window.PVR = window.PVR || {};
               ctx.restore();
             }
             text(ctx, 'MENU', b.x + b.w / 2, b.y + b.h / 2, 22);
-            handOpen = palmTime >= PALM || restOpen >= REST;
+          } else {
+            restOpen = 0;
           }
-          if (downTime >= LOOK || handOpen) open(orientation);
+          if (palmTime >= PALM || restOpen >= REST) open(orientation);
           return;
         }
 
@@ -269,20 +257,14 @@ window.PVR = window.PVR || {};
         }
         const under = (point) => tiles.find((t) => t.corners && inside(point, t.corners));
 
-        // Hands come first; looking only counts when no hand is in view, so a
-        // glance cannot choose one tile while a finger is going for another.
+        // Looking at a tile only shows which one a SELECT press would choose.
         const pressed = new Set();
+        const aimed = input.handsOn ? null : under(middle) || null;
+        if (aimed && input.select) pressed.add(aimed);
         const pointing = input.hands.map((hand) => under(hand.tip));
         pointing.forEach((t, i) => { if (t && pinched[i]) pressed.add(t); });
         const rested = pointing.find(Boolean) || null;
         if (dwell(rest, rested ? rested.id : null, dt, REST, rested && rested.repeat)) pressed.add(rested);
-        const looking = input.hands.length === 0;
-        const looked = looking ? under(middle) || null : null;
-        if (dwell(gaze, looked ? looked.id : null, dt, LOOK, looked && looked.repeat)) pressed.add(looked);
-        if (input.tap) {
-          const tapped = under(input.tap);
-          if (tapped) pressed.add(tapped);
-        }
 
         ctx.fillStyle = 'rgba(0, 0, 0, .55)';
         ctx.fillRect(0, 0, width, height);
@@ -293,7 +275,7 @@ window.PVR = window.PVR || {};
           }
           if (!t.corners) continue;
           const c = t.corners;
-          const lit = t.id === gaze.id || t.id === rest.id;
+          const lit = t === aimed || t.id === rest.id;
           ctx.beginPath();
           ctx.moveTo(c[0][0], c[0][1]);
           for (let i = 1; i < 4; i++) ctx.lineTo(c[i][0], c[i][1]);
@@ -303,10 +285,10 @@ window.PVR = window.PVR || {};
           ctx.strokeStyle = lit ? '#fff' : 'rgba(255, 255, 255, .5)';
           ctx.lineWidth = 3;
           ctx.stroke();
-          // The countdown: the tile fills from the left while you look at it or rest a finger on it.
-          const state = t.id === rest.id ? rest : (t.id === gaze.id ? gaze : null);
+          // The tile fills from the left while a fingertip rests on it.
+          const state = t.id === rest.id ? rest : null;
           if (state && !state.done && state.time > 0) {
-            const f = Math.min(1, state.time / (state === rest ? REST : LOOK));
+            const f = Math.min(1, state.time / REST);
             ctx.beginPath();
             ctx.moveTo(c[0][0], c[0][1]);
             ctx.lineTo(c[0][0] + (c[1][0] - c[0][0]) * f, c[0][1] + (c[1][1] - c[0][1]) * f);
@@ -327,23 +309,21 @@ window.PVR = window.PVR || {};
           }
         }
 
-        // Where you are looking, when looking is what chooses.
-        if (looking) {
+        // Level 1: the cross you aim with, and a reminder of how to choose.
+        if (!input.handsOn) {
           ctx.beginPath();
-          ctx.arc(middle[0], middle[1], 7, 0, Math.PI * 2);
-          ctx.fillStyle = '#fff';
-          ctx.fill();
+          ctx.moveTo(middle[0] - 18, middle[1]); ctx.lineTo(middle[0] - 5, middle[1]);
+          ctx.moveTo(middle[0] + 5, middle[1]); ctx.lineTo(middle[0] + 18, middle[1]);
+          ctx.moveTo(middle[0], middle[1] - 18); ctx.lineTo(middle[0], middle[1] - 5);
+          ctx.moveTo(middle[0], middle[1] + 5); ctx.lineTo(middle[0], middle[1] + 18);
           ctx.strokeStyle = 'rgba(0, 0, 0, .7)';
+          ctx.lineWidth = 7;
+          ctx.stroke();
+          ctx.strokeStyle = '#fff';
           ctx.lineWidth = 3;
           ctx.stroke();
-          if (gaze.id && !gaze.done) {
-            ctx.beginPath();
-            ctx.arc(middle[0], middle[1], 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, gaze.time / LOOK));
-            ctx.strokeStyle = '#3dffb0';
-            ctx.lineWidth = 6;
-            ctx.stroke();
-          }
         }
+        text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.82, 19, '#3dffb0');
 
         // Press last, so a tile that changes the screen does not disturb this frame's drawing.
         for (const t of pressed) t.run();

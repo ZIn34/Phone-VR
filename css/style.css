@@ -206,7 +206,12 @@ html, body {
   border-radius: 10px;
 }
 
-.vr-menu-card { margin-top: 1.5rem; border-color: var(--accent); }
+#ready { margin-top: 1.5rem; }
+.start-note { margin: .7rem 0 0; color: var(--muted); font-size: .95rem; }
+
+/* While playing a game nothing extra sits on the screen. A tap brings the buttons back for a moment. */
+#vr.bare .vr-bar,
+#vr.bare .menu-button { display: none; }
 
 /* Opens the floating menu: at the side of the screen, above the left thumb. */
 .menu-button {
@@ -236,6 +241,7 @@ html, body {
   width: 4.4rem;
   height: 6.5rem;
   font: inherit;
+  font-size: .8rem;
   font-weight: 700;
   color: #fff;
   background: rgba(79, 140, 255, .7);

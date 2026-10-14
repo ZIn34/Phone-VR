@@ -7,7 +7,7 @@ window.PVR = window.PVR || {};
 (function (PVR) {
   const STATUS = {
     loading: 'Getting hand tracking ready…',
-    failed: 'Hand tracking could not start. In Settings, choose Level 1.',
+    failed: 'Hand tracking could not start. Use the buttons at the sides instead.',
     none: 'No hand in view. Hold your hand up in front of the phone.',
   };
 

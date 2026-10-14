@@ -166,31 +166,7 @@ window.PVR = window.PVR || {};
       }
     }
 
-    // Where a touch on the screen lands on the overlay canvas, allowing for the
-    // eye-fit settings and the lens curve. Null if it is outside both pictures.
-    function pointAt(clientX, clientY) {
-      const box = canvas.getBoundingClientRect();
-      const W = canvas.width;
-      const H = canvas.height;
-      if (!W || !H || !box.width) return null;
-      const x = (clientX - box.left) / box.width * W;
-      const y = (1 - (clientY - box.top) / box.height) * H; // measured up from the bottom, like the drawing
-      const layout = PVR.eyeLayout(W, H, settings);
-      const eye = x < W / 2 ? layout.left : layout.right;
-      const qx = (x - eye.x) / layout.unit;
-      const qy = (y - eye.y) / layout.unit;
-      const r2 = qx * qx + qy * qy;
-      const k = settings.distortion ? settings.strength : 0;
-      const curve = 1 + k * 0.5 * r2 + k * 0.2 * r2 * r2;
-      const sx = qx * curve;
-      const sy = qy * curve;
-      if (Math.abs(sx) > layout.halfWidth || Math.abs(sy) > 1) return null;
-      const unit = OVERLAY_HEIGHT / 2;
-      return [Math.round(layout.halfWidth * OVERLAY_HEIGHT) / 2 + sx * unit, unit - sy * unit];
-    }
-
     return {
-      pointAt,
       start() { if (!raf) raf = requestAnimationFrame(frame); },
       stop() { cancelAnimationFrame(raf); raf = 0; },
       setPainter(fn) { painter = fn; },

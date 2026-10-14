@@ -15,7 +15,8 @@
 </head>
 <body>
 
-  <!-- Home -->
+  <!-- The one page outside VR. A tap on Start is needed before a phone will
+       hand over its camera and motion sensors; after that everything is in VR. -->
   <main id="home" class="screen page" hidden>
     <header class="page-head">
       <h1>Phone VR</h1>
@@ -27,67 +28,22 @@
       <div class="levels">
         <button class="level" type="button" data-level="1">
           <span class="level-name">Level 1 &middot; Screen buttons</span>
-          <span class="level-text">Hold the phone in your hands. Turn to look, tap the side buttons to act.</span>
+          <span class="level-text">Hold the phone in your hands. Turn to aim, tap the buttons at the sides.</span>
         </button>
         <button class="level" type="button" data-level="2">
           <span class="level-name">Level 2 &middot; One hand</span>
-          <span class="level-text">Hold the phone to your eyes with one hand. Your other hand does the actions.</span>
+          <span class="level-text">Hold the phone to your eyes with one hand. Point and pinch with the other.</span>
         </button>
         <button class="level" type="button" data-level="3">
           <span class="level-name">Level 3 &middot; Both hands</span>
-          <span class="level-text">Phone in a headset holder. Both your hands do the actions.</span>
+          <span class="level-text">Phone in a headset holder. Point and pinch with either hand.</span>
         </button>
       </div>
     </section>
 
-    <a class="card vr-menu-card" href="#menu">
-      <span class="card-title">Open the menu in VR</span>
-      <span class="card-text">Start once, then choose everything from tiles floating in front of you.</span>
-    </a>
-
-    <section class="group" aria-labelledby="games-title">
-      <h2 id="games-title">Games</h2>
-      <a class="card" href="#follow-the-circle">
-        <span class="card-title">Follow the circle</span>
-        <span class="card-text">Keep your crosshair on a moving circle for one minute. It gets faster.</span>
-        <span id="home-best" class="card-best" hidden></span>
-      </a>
-    </section>
-
-    <section class="group" aria-labelledby="testing-title">
-      <h2 id="testing-title">Testing</h2>
-      <a class="card" href="#see-your-room">
-        <span class="card-title">See your room</span>
-        <span class="card-text">Your back camera in both eyes, with head tracking markers.</span>
-      </a>
-      <a class="card" href="#pop-the-targets">
-        <span class="card-title">Pop the targets</span>
-        <span class="card-text">Try out your way of playing: side buttons, one hand or both hands.</span>
-      </a>
-    </section>
-
-    <aside id="bars-tip" class="tip">
-      <h3>Hide Safari's bars</h3>
-      <ol>
-        <li>Tap the <strong>Share</strong> button in Safari.</li>
-        <li>Choose <strong>Add to Home Screen</strong>.</li>
-        <li>Open <strong>Phone VR</strong> from the new icon. It fills the whole screen.</li>
-      </ol>
-    </aside>
-  </main>
-
-  <!-- See your room: before starting -->
-  <main id="intro" class="screen page" hidden>
-    <a class="back" href="#">&larr; Home</a>
-    <header class="page-head">
-      <h1 id="intro-title"></h1>
-      <p id="intro-lead" class="lead"></p>
-    </header>
-
     <div id="ready">
-      <ol id="intro-steps" class="steps"></ol>
-      <p id="intro-best" class="best" hidden></p>
       <button id="start" class="primary" type="button">Start</button>
+      <p class="start-note">Allow motion and camera when asked, then turn the phone sideways. You start in the home menu, in VR.</p>
     </div>
 
     <!-- Shown instead of Start when something is refused or missing -->
@@ -100,7 +56,20 @@
       <button id="continue" class="secondary" type="button">Continue without head tracking</button>
     </div>
 
-    <p id="intro-note" class="note"></p>
+    <p id="home-best" class="best" hidden></p>
+    <p class="note">
+      Good to know: a phone has one back camera, so both eyes get the same picture.
+      You will see your room, but it will look flat, not truly 3D.
+    </p>
+
+    <aside id="bars-tip" class="tip">
+      <h3>Hide Safari's bars</h3>
+      <ol>
+        <li>Tap the <strong>Share</strong> button in Safari.</li>
+        <li>Choose <strong>Add to Home Screen</strong>.</li>
+        <li>Open <strong>Phone VR</strong> from the new icon. It fills the whole screen.</li>
+      </ol>
+    </aside>
   </main>
 
   <!-- VR view -->
@@ -114,9 +83,9 @@
       <button id="notice-ok" type="button">OK</button>
     </div>
     <button id="open-menu" class="menu-button" type="button">MENU</button>
-    <!-- Level 1: action buttons under the thumbs -->
-    <button id="act-left" class="side-button left" type="button" hidden>POP</button>
-    <button id="act-right" class="side-button right" type="button" hidden>POP</button>
+    <!-- Level 1: action buttons under the thumbs. SELECT in the menu, POP in Pop the targets. -->
+    <button id="act-left" class="side-button left" type="button" hidden>SELECT</button>
+    <button id="act-right" class="side-button right" type="button" hidden>SELECT</button>
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
       <button id="play-again" type="button" hidden>Play again</button>
