@@ -87,6 +87,8 @@ window.PVR = window.PVR || {};
             pinch: far(4, 8) / far(0, 9),
             // All four fingers stretched out.
             open: [8, 12, 16, 20].every((tip) => far(tip, 0) > far(tip - 2, 0) * 1.1),
+            // Which of index, middle, ring and little finger are stretched out.
+            up: [8, 12, 16, 20].map((tip) => far(tip, 0) > far(tip - 2, 0) * 1.1),
             // The palm, not the back of the hand, is towards the camera.
             palmUp: right ? turn < 0 : turn > 0,
           };

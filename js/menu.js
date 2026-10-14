@@ -138,6 +138,7 @@ window.PVR = window.PVR || {};
       }
       // Settings: one line each, - on the left and + on the right.
       const lines = [];
+      for (const toggle of PVR.settingToggles) lines.push({ toggle: toggle.name, label: toggle.label, on: toggle.on, off: toggle.off });
       for (const row of PVR.settingRows) {
         if (!PVR.settingShown(row)) continue;
         if (row.name === 'strength') lines.push({ toggle: 'distortion', label: 'Lens correction' });
@@ -153,7 +154,7 @@ window.PVR = window.PVR || {};
           tile(name + '+', '+', '', 13 * RAD, y, 7 * RAD, LINE, () => change(name, 1), true);
           list.push({ words: line.row.label + ': ' + line.row.show(settings[name]), x: 0, y });
         } else if (line.toggle) {
-          tile(line.toggle, line.label + ': ' + (settings[line.toggle] ? 'On' : 'Off'), '', 0, y, 33 * RAD, LINE, () => {
+          tile(line.toggle, line.label + ': ' + (settings[line.toggle] ? (line.on || 'On') : (line.off || 'Off')), '', 0, y, 33 * RAD, LINE, () => {
             settings[line.toggle] = !settings[line.toggle];
             PVR.saveSettings();
           });

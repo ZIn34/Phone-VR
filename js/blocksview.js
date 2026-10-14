@@ -92,18 +92,20 @@ window.PVR = window.PVR || {};
     return p;
   }
 
-  // Every face of every block that has air beside it, as triangles.
-  function buildMesh(world) {
+  // One piece of the world: every face of its blocks that has air beside it, as triangles.
+  function buildMesh(world, cx, cz) {
     const data = [];
+    const size = world.chunk;
+    const empty = (x, y, z) => { const k = world.get(x, y, z); return !k || k === B.kinds.FLOOR; };
     for (let y = 0; y < world.height; y++) {
-      for (let z = 0; z < world.size; z++) {
-        for (let x = 0; x < world.size; x++) {
+      for (let z = cz * size; z < (cz + 1) * size; z++) {
+        for (let x = cx * size; x < (cx + 1) * size; x++) {
           const kind = world.get(x, y, z);
-          if (!kind) continue;
+          if (!kind || kind === B.kinds.FLOOR) continue; // the floor of a flat world is not drawn
           const colours = COLOURS[kind];
           for (const face of FACES) {
             const nx = x + face.n[0], ny = y + face.n[1], nz = z + face.n[2];
-            if (ny < 0 || world.get(nx, ny, nz)) continue; // hidden against another block
+            if (ny < 0 || !empty(nx, ny, nz)) continue; // hidden against another block
             const c = colours[face.colour];
             const push = (corner) => data.push(x + corner[0], y + corner[1], z + corner[2], corner[3], corner[4], c[0] * face.light, c[1] * face.light, c[2] * face.light);
             const q = face.corners;
@@ -135,10 +137,9 @@ window.PVR = window.PVR || {};
       colour: gl.getAttribLocation(blocks, 'aColour'),
       linePlace: gl.getAttribLocation(lines, 'aPlace'),
     };
-    const meshBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
-    let meshFor = -1;
-    let vertices = 0;
+    const pieces = {};          // "cx,cz" -> { buffer, vertices }
+    const SEE = 26;             // pieces further away than this are lost in the haze, so they are not drawn
 
     const scene = {
       orientation: [0, 0, 0, 1],  // which way the player is looking
@@ -154,13 +155,16 @@ window.PVR = window.PVR || {};
 
       // eye: -1 left, +1 right, 0 for one picture. halfWidth: half the picture's width when its height is 2.
       render(eye, halfWidth, focal) {
-        if (meshFor !== world.changed) {
-          const mesh = buildMesh(world);
-          gl.bindBuffer(gl.ARRAY_BUFFER, meshBuffer);
+        // Redraw the pieces that changed. Each is small, so building stays quick however big the world is.
+        for (const key of world.dirty) {
+          const [cx, cz] = key.split(',').map(Number);
+          const mesh = buildMesh(world, cx, cz);
+          const piece = pieces[key] || (pieces[key] = { buffer: gl.createBuffer(), vertices: 0, cx, cz });
+          gl.bindBuffer(gl.ARRAY_BUFFER, piece.buffer);
           gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.DYNAMIC_DRAW);
-          vertices = mesh.length / 8;
-          meshFor = world.changed;
+          piece.vertices = mesh.length / 8;
         }
+        world.dirty.clear();
 
         // Where the eye is, and the matrix that turns places in the world into places in the picture.
         const q = scene.orientation;
@@ -188,14 +192,23 @@ window.PVR = window.PVR || {};
         gl.useProgram(blocks);
         gl.uniformMatrix4fv(gl.getUniformLocation(blocks, 'uCamera'), false, camera);
         gl.uniform3f(gl.getUniformLocation(blocks, 'uSky'), SKY[0], SKY[1], SKY[2]);
-        gl.bindBuffer(gl.ARRAY_BUFFER, meshBuffer);
         gl.enableVertexAttribArray(at.place);
         gl.enableVertexAttribArray(at.uv);
         gl.enableVertexAttribArray(at.colour);
-        gl.vertexAttribPointer(at.place, 3, gl.FLOAT, false, 32, 0);
-        gl.vertexAttribPointer(at.uv, 2, gl.FLOAT, false, 32, 12);
-        gl.vertexAttribPointer(at.colour, 3, gl.FLOAT, false, 32, 20);
-        gl.drawArrays(gl.TRIANGLES, 0, vertices);
+        const size = world.chunk;
+        for (const key in pieces) {
+          const piece = pieces[key];
+          if (!piece.vertices) continue;
+          // How far the nearest part of this piece is from the player.
+          const dx = Math.max(piece.cx * size - eyes[0], 0, eyes[0] - (piece.cx + 1) * size);
+          const dz = Math.max(piece.cz * size - eyes[2], 0, eyes[2] - (piece.cz + 1) * size);
+          if (Math.hypot(dx, dz) > SEE) continue;
+          gl.bindBuffer(gl.ARRAY_BUFFER, piece.buffer);
+          gl.vertexAttribPointer(at.place, 3, gl.FLOAT, false, 32, 0);
+          gl.vertexAttribPointer(at.uv, 2, gl.FLOAT, false, 32, 12);
+          gl.vertexAttribPointer(at.colour, 3, gl.FLOAT, false, 32, 20);
+          gl.drawArrays(gl.TRIANGLES, 0, piece.vertices);
+        }
         gl.disableVertexAttribArray(at.uv);
         gl.disableVertexAttribArray(at.colour);
         gl.disableVertexAttribArray(at.place);
@@ -225,18 +238,20 @@ window.PVR = window.PVR || {};
     ctx.fillText(words, x, y);
   }
 
-  // The buttons that hang in the view at Levels 2 and 3, worked by resting a fingertip on them.
+  // The colour to show for a kind of block in the inventory bar.
+  PVR.blockColour = function (kind) {
+    const c = COLOURS[kind][kind === B.kinds.GRASS ? 0 : 1];
+    return `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
+  };
+
+  // The one button that hangs in the view at Levels 2 and 3, worked by resting a fingertip on it.
   PVR.blockHandButtons = function (width, height) {
-    return [
-      { id: 'walk', label: 'WALK', x: width * 0.14 - 50, y: height / 2 - 34, w: 100, h: 68 },
-      { id: 'mode', label: '', x: width * 0.86 - 50, y: height / 2 - 34, w: 100, h: 68 },
-      { id: 'kind', label: '', x: width * 0.86 - 50, y: height * 0.22 - 28, w: 100, h: 56 },
-    ];
+    return [{ id: 'mode', label: '', x: width * 0.86 - 50, y: height / 2 - 34, w: 100, h: 68 }];
   };
 
   // What is painted over the block world: the cross to aim with, the block in
   // hand, and at Levels 2 and 3 the hand-worked buttons.
-  // hud: { handsOn, building, over: id of the hand button a fingertip is on, held: 0 to 1 }
+  // hud: { handsOn, building, over: id of the hand button a fingertip is on, held: 0 to 1, sign: 2 or 3 fingers up, or 0 }
   PVR.paintBlocks = function (ctx, width, height, world, hud) {
     const cx = width / 2;
     const cy = height / 2;
@@ -256,7 +271,6 @@ window.PVR = window.PVR || {};
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 3;
       ctx.stroke();
-      text(ctx, 'Block: ' + world.kindName(), cx, height * 0.9, 22);
       return;
     }
 
@@ -269,16 +283,18 @@ window.PVR = window.PVR || {};
       ctx.strokeStyle = 'rgba(255, 255, 255, .6)';
       ctx.lineWidth = 3;
       ctx.stroke();
-      if (on && b.id !== 'walk' && hud.held > 0) {
+      if (on && hud.held > 0) {
         ctx.save();
         ctx.clip();
         ctx.fillStyle = 'rgba(61, 255, 176, .6)';
         ctx.fillRect(b.x, b.y, b.w * Math.min(1, hud.held), b.h);
         ctx.restore();
       }
-      const label = b.id === 'mode' ? (hud.building ? 'BUILD' : 'BREAK') : (b.id === 'kind' ? world.kindName().toUpperCase() : b.label);
+      const label = hud.building ? 'BUILD' : 'BREAK';
       text(ctx, label, b.x + b.w / 2, b.y + b.h / 2, 20);
     }
-    text(ctx, hud.building ? 'Pinch on a block to build' : 'Pinch on a block to break it', cx, height * 0.9, 20);
+    // What the hand signs do, and which one is being seen right now.
+    const sign = hud.sign === 2 ? 'Two fingers: walking' : (hud.sign === 3 ? 'Three fingers: next block' : (hud.building ? 'Pinch: build' : 'Pinch: break') + '   2 fingers: walk   3 fingers: next block');
+    text(ctx, sign, cx, height * 0.08, 18, hud.sign ? '#3dffb0' : '#fff');
   };
 })(window.PVR);

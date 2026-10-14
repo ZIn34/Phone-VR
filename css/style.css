@@ -277,7 +277,32 @@ html, body {
 .block-button.walk { left: calc(.3rem + env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); height: 6.5rem; }
 .block-button.build { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% - 4.4rem); }
 .block-button.break { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% + .2rem); }
-.block-button.kind { right: calc(.3rem + env(safe-area-inset-right)); top: calc(.5rem + env(safe-area-inset-top)); height: 2.6rem; font-weight: 600; }
+
+/* The inventory bar: the blocks you can build with, along the bottom. */
+.hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(.4rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  gap: .3rem;
+  padding: .3rem;
+  background: rgba(0, 0, 0, .45);
+  border-radius: 12px;
+}
+.hotbar button {
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 3px solid rgba(0, 0, 0, .5);
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+.hotbar button[aria-pressed="true"] { border-color: #fff; transform: scale(1.15); }
+/* When the other buttons are called up with a tap, they take the bar's place for a moment. */
+#vr:not(.bare) .hotbar { display: none; }
+.panel .switch.wide { min-width: 6.5rem; font-size: .95rem; }
 .block-button:active, .block-button.held { background: rgba(79, 140, 255, .8); }
 
 /* Buttons at the bottom middle, between the lenses, where thumbs can reach. */

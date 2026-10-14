@@ -92,7 +92,7 @@ const targets = PVR.targets.createTargets(Date.now());
 const hands = PVR.createHands(video);
 
 // Block world. What you build is kept on this phone.
-const WORLD_KEY = 'phone-vr.block-world.v1';
+const WORLD_KEY = 'phone-vr.block-world.v2'; // v2: the bigger world; builds from the small one could not be carried over
 const WORLD_SEED = 20261013;
 const world = PVR.blocks.createWorld(WORLD_SEED);
 try {
@@ -110,10 +110,41 @@ const blockButtons = {
   walk: document.getElementById('b-walk'),
   build: document.getElementById('b-build'),
   dig: document.getElementById('b-break'),
-  kind: document.getElementById('b-kind'),
 };
+
+// The inventory bar: one square for each kind of block you can build with.
+const hotbar = document.getElementById('hotbar');
+const hotbarSlots = PVR.blocks.BUILD_WITH.map((kind, i) => {
+  const slot = document.createElement('button');
+  slot.type = 'button';
+  slot.style.background = PVR.blockColour(kind);
+  slot.setAttribute('aria-label', PVR.blocks.NAMES[kind]);
+  slot.addEventListener('click', () => world.setKind(i));
+  hotbar.append(slot);
+  return slot;
+});
+
+// Real steps, felt by the phone's motion sensor, walk you forward.
+const stepCounter = PVR.steps.createStepCounter();
+const STRIDE = 0.8; // blocks walked for each real step
+window.addEventListener('devicemotion', (event) => {
+  if (!PVR.settings.steps || !walkable() || menu.isOpen()) return;
+  const a = event.accelerationIncludingGravity;
+  if (!a || a.x === null) return;
+  const r = event.rotationRate || {};
+  const turn = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
+  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + STRIDE, STRIDE * 3);
+});
+
+// Whether you are somewhere you can walk about in.
+function walkable() {
+  return state.experience === 'block-world';
+}
 const blockPlay = {
   walking: false,     // the WALK button is held
+  stride: 0,          // blocks still to walk from real steps already taken
+  sign: 0,            // 2 or 3: that many fingers are being held up
+  signed3: false,     // the three-finger sign has already changed the block this time
   building: true,     // at Levels 2 and 3: whether a pinch builds or breaks
   over: null,         // which in-view hand button a fingertip is on
   held: 0,
@@ -147,6 +178,12 @@ function lookThrough(orientation, focal, width, height, point) {
 function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused) {
   const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
   let walk = blockPlay.walking;
+  blockPlay.sign = 0;
+  // Real steps already taken are walked off a little each frame.
+  if (blockPlay.stride > 0 && !paused) {
+    walk = true;
+    blockPlay.stride = Math.max(0, blockPlay.stride - PVR.blocks.rules.speed * dt);
+  }
   let aimPoint = [width / 2, height / 2];
   blockPlay.over = null;
 
@@ -157,19 +194,21 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
     const on = buttons.find((b) => tips.some((t) => t[0] >= b.x && t[0] <= b.x + b.w && t[1] >= b.y && t[1] <= b.y + b.h));
     if (on) {
       blockPlay.over = on.id;
-      if (on.id === 'walk') {
-        walk = true;
-      } else {
-        blockPlay.held += dt / 0.8;
-        if (blockPlay.held >= 1) {
-          if (on.id === 'mode') blockPlay.building = !blockPlay.building; else world.nextKind();
-          blockPlay.held = -0.6; // a pause before it can go again
-        }
+      blockPlay.held += dt / 0.8;
+      if (blockPlay.held >= 1) {
+        blockPlay.building = !blockPlay.building;
+        blockPlay.held = -0.6; // a pause before it can go again
       }
     } else {
       blockPlay.held = 0;
     }
-    const pointer = seen.find((hand) => !buttons.some((b) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h));
+    // Hand signs: two fingers up walks, three fingers up changes the block (once each time).
+    const signOf = (hand) => (hand.up && hand.up[0] && hand.up[1] && !hand.up[3] ? (hand.up[2] ? 3 : 2) : 0);
+    blockPlay.sign = seen.reduce((sign, hand) => sign || signOf(hand), 0);
+    if (blockPlay.sign === 2) walk = true;
+    if (blockPlay.sign === 3 && !blockPlay.signed3) world.nextKind();
+    blockPlay.signed3 = blockPlay.sign === 3;
+    const pointer = seen.find((hand) => !signOf(hand) && !buttons.some((b) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h));
     aimPoint = pointer ? pointer.tip : null;
     seen.forEach((hand, i) => {
       const was = !!blockPlay.pinching[i];
@@ -187,7 +226,7 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
   blockScene.orientation = orientation;
   blockScene.target = paused ? null : target;
   saveWorld(performance.now());
-  return { handsOn, building: blockPlay.building, over: blockPlay.over, held: Math.max(0, blockPlay.held) };
+  return { handsOn, building: blockPlay.building, over: blockPlay.over, held: Math.max(0, blockPlay.held), sign: blockPlay.sign };
 }
 
 // Level 1: BUILD and BREAK act on the block under the cross. Looking alone does nothing.
@@ -254,8 +293,9 @@ function fitControls(level, now) {
   const label = menu.isOpen() ? 'SELECT' : (state.experience === 'pop-the-targets' ? 'POP' : '');
   const inBlocks = state.experience === 'block-world' && !!blockScene && !menu.isOpen();
   for (const key in blockButtons) blockButtons[key].hidden = !(buttons && inBlocks);
-  blockButtons.kind.textContent = world.kindName();
-  if (!inBlocks) blockPlay.walking = false;
+  hotbar.hidden = !inBlocks;
+  hotbarSlots.forEach((slot, i) => slot.setAttribute('aria-pressed', i === world.kind));
+  if (!inBlocks) { blockPlay.walking = false; blockPlay.stride = 0; }
   if (view) view.setScene(state.experience === 'block-world' ? blockScene : null);
   for (const button of sideButtons) {
     button.hidden = !(buttons && label);
@@ -415,7 +455,13 @@ async function askForMotion() {
   if (typeof DeviceOrientationEvent === 'undefined') return 'unavailable';
   if (typeof DeviceOrientationEvent.requestPermission !== 'function') return 'granted';
   try {
-    return (await DeviceOrientationEvent.requestPermission()) === 'granted' ? 'granted' : 'denied';
+    // Both asked at once, straight from the tap: which way the phone points, and its movement (for counting steps).
+    const pointing = DeviceOrientationEvent.requestPermission();
+    const moving = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'
+      ? DeviceMotionEvent.requestPermission().catch(() => 'denied')
+      : Promise.resolve('granted');
+    const [answer] = await Promise.all([pointing, moving]);
+    return answer === 'granted' ? 'granted' : 'denied';
   } catch (err) {
     return 'denied';
   }
@@ -542,7 +588,7 @@ for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']
 }
 blockButtons.build.addEventListener('click', () => blockAct(true));
 blockButtons.dig.addEventListener('click', () => blockAct(false));
-blockButtons.kind.addEventListener('click', () => world.nextKind());
+
 document.getElementById('open-menu').addEventListener('click', () => {
   if (!menu.isOpen()) menu.open(tracking.orientation()); else if (state.experience !== HOME) menu.close();
 });

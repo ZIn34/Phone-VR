@@ -42,15 +42,22 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
 1. From the home menu choose **Block world**. Your room should be gone: you
    are standing among blocks, with sky above.
 2. Turn all the way round and look up and down.
-3. Level 1: hold **WALK** (left thumb) to walk the way you are looking. Aim the
-   cross at a block: it gets a white outline. Tap **BUILD** or **BREAK** (right
-   thumb). The button at the top right changes which block you build with.
-4. Levels 2 and 3: point at a block and pinch to build. Rest a fingertip on
-   the BUILD button in the view to switch to BREAK, and on WALK to walk.
-5. Leave and come back: what you built should still be there.
+3. Walk: take real steps (or step on the spot) and you move forward the way
+   you are facing. At Level 1 you can also hold **WALK** (left thumb). At
+   Levels 2 and 3 hold up **two fingers** in front of the camera.
+4. The inventory bar along the bottom shows the blocks you can build with. At
+   Level 1 tap one to choose it. At Levels 2 and 3 hold up **three fingers**
+   to move to the next one.
+5. Level 1: aim the cross at a block (white outline) and tap **BUILD** or
+   **BREAK**. Levels 2 and 3: point at a block and pinch; rest a fingertip on
+   the BUILD button in the view to switch to BREAK.
+6. Leave and come back: what you built should still be there.
+7. If moving the phone about makes you walk by mistake, turn off **Walk by
+   stepping** in Settings.
 
-Please tell me: is it smooth as you look around, is walking too fast or slow,
-and are the buttons where your thumbs want them.
+Please tell me: is it smooth, do real steps move you (and does standing still
+keep you still), do the two-finger and three-finger signs work, and is a stride
+too long or too short.
 
 ## 4. Head tracking and eye fit
 

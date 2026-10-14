@@ -3,16 +3,18 @@
 // Block world: the rules of the world, with no drawing in it, so it is also
 // run by tests/blocks.test.js.
 //
-// The world is a box of cubes, SIZE wide and deep and HEIGHT tall. x is east,
+// The world is a box of cubes, SIZE wide and deep and HEIGHT tall. A flat
+// world has no land of its own: just a floor you cannot see, to build on. x is east,
 // y is up, z is south. Each cube is one unit across. The player's place is
 // where their feet are.
 (function (root) {
   const inNode = typeof module !== 'undefined' && module.exports;
 
-  const SIZE = 32;
+  const SIZE = 96;
   const HEIGHT = 16;
-  const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, PLANKS = 6, BRICK = 7;
-  const NAMES = ['Air', 'Grass', 'Dirt', 'Stone', 'Wood', 'Leaves', 'Planks', 'Brick'];
+  const CHUNK = 16;   // the world is drawn in square pieces this wide, so one changed block does not mean redrawing everything
+  const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, PLANKS = 6, BRICK = 7, FLOOR = 8;
+  const NAMES = ['Air', 'Grass', 'Dirt', 'Stone', 'Wood', 'Leaves', 'Planks', 'Brick', 'Floor'];
   const BUILD_WITH = [PLANKS, BRICK, STONE, WOOD, LEAVES, DIRT, GRASS]; // what you can place, in the order you cycle through
 
   const rules = {
@@ -36,7 +38,7 @@
     };
   }
 
-  function createWorld(seed) {
+  function createWorld(seed, flat) {
     const cells = new Uint8Array(SIZE * SIZE * HEIGHT);
     const edits = {}; // every block the player has changed: place in the list -> kind
     const world = {
@@ -45,8 +47,11 @@
       height: HEIGHT,
       player: { x: SIZE / 2 + 0.5, y: HEIGHT, z: SIZE / 2 + 0.5, fall: 0 },
       kind: 0,       // which of BUILD_WITH is in hand
-      changed: 0,    // goes up every time a block changes, so the drawing knows to rebuild
+      changed: 0,    // goes up every time a block changes
+      chunk: CHUNK,
+      dirty: new Set(), // the pieces of the world whose drawing is out of date: "cx,cz"
     };
+    const markAll = () => { for (let cx = 0; cx < SIZE / CHUNK; cx++) for (let cz = 0; cz < SIZE / CHUNK; cz++) world.dirty.add(cx + ',' + cz); };
     const at = (x, y, z) => (y * SIZE + z) * SIZE + x;
     const inside = (x, y, z) => x >= 0 && x < SIZE && z >= 0 && z < SIZE && y >= 0 && y < HEIGHT;
 
@@ -58,6 +63,10 @@
     world.solid = (x, y, z) => world.get(x, y, z) !== AIR;
 
     function generate() {
+      if (flat) {
+        for (let x = 0; x < SIZE; x++) for (let z = 0; z < SIZE; z++) cells[at(x, 0, z)] = FLOOR;
+        return;
+      }
       const random = randomFrom(seed);
       const a = random() * 6.28, b = random() * 6.28, c = random() * 6.28;
       const ground = (x, z) => Math.round(4.5 + 1.6 * Math.sin(x * 0.21 + a) + 1.4 * Math.sin(z * 0.17 + b) + 0.9 * Math.sin((x + z) * 0.33 + c));
@@ -68,7 +77,7 @@
         }
       }
       // A few trees, kept away from the middle where the player starts.
-      for (let n = 0; n < 9; n++) {
+      for (let n = 0; n < Math.round(SIZE * SIZE / 200); n++) {
         const x = 3 + Math.floor(random() * (SIZE - 6));
         const z = 3 + Math.floor(random() * (SIZE - 6));
         if (Math.abs(x - SIZE / 2) < 3 && Math.abs(z - SIZE / 2) < 3) continue;
@@ -97,6 +106,10 @@
       cells[at(x, y, z)] = kind;
       edits[at(x, y, z)] = kind;
       world.changed++;
+      // A block on the edge of a piece also changes how its neighbour looks.
+      for (const dx of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+        if (inside(x + dx, y, z + dz)) world.dirty.add(Math.floor((x + dx) / CHUNK) + ',' + Math.floor((z + dz) / CHUNK));
+      }
     }
 
     // Whether the player's body would be inside a block if their feet were here.
@@ -164,6 +177,9 @@
     world.nextKind = function () {
       world.kind = (world.kind + 1) % BUILD_WITH.length;
     };
+    world.setKind = function (kind) {
+      if (kind >= 0 && kind < BUILD_WITH.length) world.kind = kind;
+    };
     world.kindName = () => NAMES[BUILD_WITH[world.kind]];
 
     // Moves the world on by dt seconds. walk is [x, z]: the way to walk, or null to stand still.
@@ -226,16 +242,18 @@
       }
       if (saved.kind >= 0 && saved.kind < BUILD_WITH.length) world.kind = saved.kind;
       world.changed++;
+      markAll();
       return true;
     };
 
     generate();
+    markAll();
     // Start standing on the ground in the middle.
     world.player.y = world.top(Math.floor(world.player.x), Math.floor(world.player.z)) + 1;
     return world;
   }
 
-  const api = { createWorld, rules, kinds: { AIR, GRASS, DIRT, STONE, WOOD, LEAVES, PLANKS, BRICK }, NAMES, BUILD_WITH, SIZE, HEIGHT };
+  const api = { createWorld, rules, kinds: { AIR, GRASS, DIRT, STONE, WOOD, LEAVES, PLANKS, BRICK, FLOOR }, NAMES, BUILD_WITH, SIZE, HEIGHT, CHUNK };
   if (inNode) {
     module.exports = api;
   } else {

@@ -36,6 +36,10 @@ window.PVR = window.PVR || {};
         steppers[row.name].hidden = !PVR.settingShown(row);
       }
       panel.querySelector('#lens-row').hidden = !settings.lenses;
+      for (const { toggle, button } of switches) {
+        button.textContent = settings[toggle.name] ? toggle.on : toggle.off;
+        button.setAttribute('aria-pressed', settings[toggle.name]);
+      }
       toggle.textContent = settings.distortion ? 'On' : 'Off';
       toggle.setAttribute('aria-pressed', settings.distortion);
       steppers.strength.classList.toggle('disabled', !settings.distortion);
@@ -75,6 +79,26 @@ window.PVR = window.PVR || {};
 
     const rows = panel.querySelector('#setting-rows');
     const lensRow = panel.querySelector('#lens-row');
+    // A switch for each one-thing-or-the-other setting, above the rest.
+    const switches = PVR.settingToggles.map((toggle) => {
+      const line = document.createElement('div');
+      line.className = 'setting';
+      const label = document.createElement('span');
+      label.className = 'setting-label';
+      label.textContent = toggle.label;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'switch wide';
+      button.dataset.toggle = toggle.name;
+      button.addEventListener('click', () => {
+        settings[toggle.name] = !settings[toggle.name];
+        PVR.saveSettings();
+        refresh();
+      });
+      line.append(label, button);
+      rows.insertBefore(line, rows.firstChild);
+      return { toggle, button };
+    });
     for (const row of ROWS) {
       const line = document.createElement('div');
       line.className = 'setting';

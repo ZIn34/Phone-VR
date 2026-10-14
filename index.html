@@ -91,7 +91,8 @@
     <button id="b-walk" class="block-button walk" type="button" hidden>WALK</button>
     <button id="b-build" class="block-button build" type="button" hidden>BUILD</button>
     <button id="b-break" class="block-button break" type="button" hidden>BREAK</button>
-    <button id="b-kind" class="block-button kind" type="button" hidden>Planks</button>
+    <!-- The blocks you can build with; the one in hand is marked -->
+    <div id="hotbar" class="hotbar" hidden></div>
     <div class="vr-bar">
       <button id="exit" type="button">Exit</button>
       <button id="play-again" type="button" hidden>Play again</button>
@@ -128,6 +129,7 @@
   <script src="js/markers.js"></script>
   <script src="js/game.js"></script>
   <script src="js/gameview.js"></script>
+  <script src="js/steps.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/blocksview.js"></script>
   <script src="js/targets.js"></script>

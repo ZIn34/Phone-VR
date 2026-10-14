@@ -11,6 +11,7 @@ window.PVR = window.PVR || {};
   PVR.defaultSettings = {
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
     distance: 25,       // how far the phone is held from your face, in centimetres
+    steps: true,        // real steps move you forward in games you can walk in
     lenses: false,      // false: window mode, one full-screen picture. true: headset view, two eye pictures for lenses
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
     size: 1,            // 1 = the picture is as tall as the screen
@@ -28,6 +29,11 @@ window.PVR = window.PVR || {};
     offsetY: { min: -0.25, max: 0.25, step: 0.01 },
     strength: { min: 0, max: 1, step: 0.05 },
   };
+
+  // Settings that are simply one thing or the other, with the words for each.
+  PVR.settingToggles = [
+    { name: 'steps', label: 'Walk by stepping', on: 'On', off: 'Off' },
+  ];
 
   PVR.settings = Object.assign({}, PVR.defaultSettings);
 
@@ -52,6 +58,9 @@ window.PVR = window.PVR || {};
     }
     if (typeof saved.distortion === 'boolean') PVR.settings.distortion = saved.distortion;
     if (typeof saved.lenses === 'boolean') PVR.settings.lenses = saved.lenses;
+    for (const toggle of PVR.settingToggles) {
+      if (typeof saved[toggle.name] === 'boolean') PVR.settings[toggle.name] = saved[toggle.name];
+    }
   };
 
   PVR.saveSettings = function () {
@@ -65,7 +74,9 @@ window.PVR = window.PVR || {};
   // Puts the numbers back to their starting values. How you play, and whether
   // headset view is on, are left alone.
   PVR.resetSettings = function () {
-    Object.assign(PVR.settings, PVR.defaultSettings, { level: PVR.settings.level, lenses: PVR.settings.lenses });
+    const keep = { level: PVR.settings.level, lenses: PVR.settings.lenses };
+    for (const toggle of PVR.settingToggles) keep[toggle.name] = PVR.settings[toggle.name];
+    Object.assign(PVR.settings, PVR.defaultSettings, keep);
     PVR.saveSettings();
   };
 
