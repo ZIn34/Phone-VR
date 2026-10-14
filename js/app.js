@@ -150,14 +150,14 @@ window.addEventListener('devicemotion', (event) => {
 function walkable() {
   return state.experience === 'block-world';
 }
+const FIST_HOLD = 0.45;   // seconds a fist is held before it breaks a block
+const FIST_AGAIN = 0.7;   // seconds between breaks while it stays held
 const blockPlay = {
   walking: false,     // the WALK button is held
   stride: 0,          // blocks still to walk from real steps already taken
   sign: 0,            // 2 or 3: that many fingers are being held up
   signed3: false,     // the three-finger sign has already changed the block this time
-  building: true,     // at Levels 2 and 3: whether a pinch builds or breaks
-  over: null,         // which in-view hand button a fingertip is on
-  held: 0,
+  fist: 0,            // seconds a fist has been held over a block
   pinching: [],
 };
 
@@ -193,40 +193,39 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
     blockPlay.stride = Math.max(0, blockPlay.stride - world.body.speed * dt);
   }
   let aimPoint = [width / 2, height / 2];
-  blockPlay.over = null;
 
   if (handsOn && !paused) {
-    // Hands: rest a fingertip on a button in the view; pinch on a block to build or break.
-    const buttons = PVR.blockHandButtons(width, height);
-    const tips = seen.map((hand) => hand.tip);
-    const on = buttons.find((b) => tips.some((t) => t[0] >= b.x && t[0] <= b.x + b.w && t[1] >= b.y && t[1] <= b.y + b.h));
-    if (on) {
-      blockPlay.over = on.id;
-      blockPlay.held += dt / 0.8;
-      if (blockPlay.held >= 1) {
-        blockPlay.building = !blockPlay.building;
-        blockPlay.held = -0.6; // a pause before it can go again
-      }
-    } else {
-      blockPlay.held = 0;
-    }
-    // Hand signs: two fingers up walks, three fingers up changes the block (once each time).
+    // Hand signs, so nothing needs a touch on the screen:
+    //   pinch = build, fist = break, two fingers up = walk, three fingers up = next block.
     const signOf = (hand) => (hand.up && hand.up[0] && hand.up[1] && !hand.up[3] ? (hand.up[2] ? 3 : 2) : 0);
+    const fistOf = (hand) => !!hand.up && !hand.up.some(Boolean);
     blockPlay.sign = seen.reduce((sign, hand) => sign || signOf(hand), 0);
     if (blockPlay.sign === 2) walk = true;
     if (blockPlay.sign === 3 && !blockPlay.signed3) world.nextKind();
     blockPlay.signed3 = blockPlay.sign === 3;
-    const pointer = seen.find((hand) => !signOf(hand) && !buttons.some((b) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h));
-    aimPoint = pointer ? pointer.tip : null;
+
+    // The hand that is aiming: a fingertip when pointing or pinching, the middle of the hand for a fist.
+    const pointer = seen.find((hand) => !signOf(hand));
+    const fist = !!pointer && fistOf(pointer);
+    aimPoint = pointer ? (fist ? pointer.palm : pointer.tip) : null;
+
+    // A fist held over a block breaks it, like a punch, and goes on breaking while it is held.
+    blockPlay.fist = fist ? blockPlay.fist + dt : 0;
+    if (blockPlay.fist >= FIST_HOLD) {
+      world.dig(world.aim(world.eyes(), lookThrough(orientation, focal, width, height, pointer.palm)));
+      blockPlay.fist = FIST_HOLD - FIST_AGAIN;
+    }
+    // A pinch builds, once, at the moment finger and thumb come together.
     seen.forEach((hand, i) => {
       const was = !!blockPlay.pinching[i];
       blockPlay.pinching[i] = hand.pinch < 0.22 || (was && hand.pinch < 0.32);
-      if (blockPlay.pinching[i] && !was && hand === pointer) {
-        const target = world.aim(world.eyes(), lookThrough(orientation, focal, width, height, hand.tip));
-        if (blockPlay.building) world.build(target); else world.dig(target);
+      if (blockPlay.pinching[i] && !was && hand === pointer && !fist) {
+        world.build(world.aim(world.eyes(), lookThrough(orientation, focal, width, height, hand.tip)));
       }
     });
     blockPlay.pinching.length = seen.length;
+  } else {
+    blockPlay.fist = 0;
   }
 
   if (!paused) world.update(dt, walk ? [ahead[0], ahead[2]] : null);
@@ -234,7 +233,7 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
   blockScene.orientation = orientation;
   blockScene.target = paused ? null : target;
   saveWorld(performance.now());
-  return { handsOn, building: blockPlay.building, over: blockPlay.over, held: Math.max(0, blockPlay.held), sign: blockPlay.sign };
+  return { handsOn, sign: blockPlay.sign, fist: Math.min(1, blockPlay.fist / FIST_HOLD), aimPoint };
 }
 
 // Level 1: BUILD and BREAK act on the block under the cross. Looking alone does nothing.

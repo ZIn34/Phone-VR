@@ -254,14 +254,9 @@ window.PVR = window.PVR || {};
     return `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
   };
 
-  // The one button that hangs in the view at Levels 2 and 3, worked by resting a fingertip on it.
-  PVR.blockHandButtons = function (width, height) {
-    return [{ id: 'mode', label: '', x: width * 0.86 - 50, y: height / 2 - 34, w: 100, h: 68 }];
-  };
-
   // What is painted over the block world: the cross to aim with, the block in
-  // hand, and at Levels 2 and 3 the hand-worked buttons.
-  // hud: { handsOn, building, over: id of the hand button a fingertip is on, held: 0 to 1, sign: 2 or 3 fingers up, or 0 }
+  // hand, and at Levels 2 and 3 what the hand signs do.
+  // hud: { handsOn, sign: 2 or 3 fingers up or 0, fist: 0 to 1 as a fist gets ready to break, aimPoint: where the hand aims }
   PVR.paintBlocks = function (ctx, width, height, world, hud) {
     const cx = width / 2;
     const cy = height / 2;
@@ -284,27 +279,16 @@ window.PVR = window.PVR || {};
       return;
     }
 
-    for (const b of PVR.blockHandButtons(width, height)) {
-      const on = b.id === hud.over;
+    // A ring that fills round a fist as it gets ready to break the block.
+    if (hud.fist > 0 && hud.aimPoint) {
       ctx.beginPath();
-      ctx.roundRect(b.x, b.y, b.w, b.h, 14);
-      ctx.fillStyle = on ? 'rgba(79, 140, 255, .55)' : 'rgba(11, 13, 18, .6)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, .6)';
-      ctx.lineWidth = 3;
+      ctx.arc(hud.aimPoint[0], hud.aimPoint[1], 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hud.fist);
+      ctx.strokeStyle = '#ffb454';
+      ctx.lineWidth = 7;
       ctx.stroke();
-      if (on && hud.held > 0) {
-        ctx.save();
-        ctx.clip();
-        ctx.fillStyle = 'rgba(61, 255, 176, .6)';
-        ctx.fillRect(b.x, b.y, b.w * Math.min(1, hud.held), b.h);
-        ctx.restore();
-      }
-      const label = hud.building ? 'BUILD' : 'BREAK';
-      text(ctx, label, b.x + b.w / 2, b.y + b.h / 2, 20);
     }
     // What the hand signs do, and which one is being seen right now.
-    const sign = hud.sign === 2 ? 'Two fingers: walking' : (hud.sign === 3 ? 'Three fingers: next block' : (hud.building ? 'Pinch: build' : 'Pinch: break') + '   2 fingers: walk   3 fingers: next block');
-    text(ctx, sign, cx, height * 0.08, 18, hud.sign ? '#3dffb0' : '#fff');
+    const seenSign = hud.fist > 0 ? 'Fist: breaking' : (hud.sign === 2 ? 'Two fingers: walking' : (hud.sign === 3 ? 'Three fingers: next block' : ''));
+    text(ctx, seenSign || 'Pinch: build    Fist: break    2 fingers: walk    3 fingers: next block', cx, height * 0.08, 18, seenSign ? '#3dffb0' : '#fff');
   };
 })(window.PVR);

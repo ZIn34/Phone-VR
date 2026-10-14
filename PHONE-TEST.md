@@ -49,8 +49,8 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
    Level 1 tap one to choose it. At Levels 2 and 3 hold up **three fingers**
    to move to the next one.
 5. Level 1: aim the cross at a block (white outline) and tap **BUILD** or
-   **BREAK**. Levels 2 and 3: point at a block and pinch; rest a fingertip on
-   the BUILD button in the view to switch to BREAK.
+   **BREAK**. Levels 2 and 3: point at a block and **pinch** to build (keep
+   your other fingers open); hold a **fist** over a block to break it.
 6. Leave and come back: what you built should still be there.
 7. If moving the phone about makes you walk by mistake, turn off **Walk by
    stepping** in Settings.
