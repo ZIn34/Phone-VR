@@ -275,6 +275,7 @@ html, body {
   -webkit-touch-callout: none;
 }
 .block-button.walk { left: calc(.3rem + env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); height: 6.5rem; }
+.block-button.jump { left: calc(.3rem + env(safe-area-inset-left)); top: calc(50% - 7.8rem); }
 .block-button.build { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% - 4.4rem); }
 .block-button.break { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% + .2rem); }
 
@@ -292,14 +293,20 @@ html, body {
   border-radius: 12px;
 }
 .hotbar button {
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.5rem;
+  height: 2.5rem;
   padding: 0;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
   border: 3px solid rgba(0, 0, 0, .5);
   border-radius: 8px;
   touch-action: manipulation;
 }
 .hotbar button[aria-pressed="true"] { border-color: #fff; transform: scale(1.15); }
+.hotbar button.none { opacity: .45; }
 /* When the other buttons are called up with a tap, they take the bar's place for a moment. */
 #vr:not(.bare) .hotbar { display: none; }
 .panel .switch.wide { min-width: 6.5rem; font-size: .95rem; }

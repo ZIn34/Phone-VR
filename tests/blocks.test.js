@@ -3,7 +3,7 @@
 // Run with: node --test tests/blocks.test.js
 const test = require('node:test');
 const assert = require('node:assert');
-const { createWorld, rules, kinds, SIZE, HEIGHT } = require('../js/blocks.js');
+const { createWorld, rules, kinds, RECIPES, SIZE, HEIGHT } = require('../js/blocks.js');
 
 const STEP = 1 / 60;
 const settle = (world) => { for (let i = 0; i < 120; i++) world.update(STEP, null); };
@@ -112,6 +112,7 @@ test('walking moves you, keeps you on the ground, and never puts you inside a bl
 
 test('a wall two blocks high stops you; a step one block high is climbed', () => {
   const world = createWorld(5);
+  world.unlimited = true; // this test is about walking, not about running out of blocks
   const p = world.player;
   const x = Math.floor(p.x), z = Math.floor(p.z), y = Math.floor(p.y);
   // Flatten a strip to the east so the test does not depend on the hills.
@@ -162,4 +163,138 @@ test('what you built, where you are and the block in hand come back after saving
 
   assert.strictEqual(createWorld(10).load(saved), false, 'a save from another world is not used');
   assert.strictEqual(createWorld(3).load('not a save'), false);
+});
+
+// A flat strip of stone to the east of the player, so these do not depend on the hills.
+function flatStrip(world) {
+  world.unlimited = true;
+  const p = world.player;
+  const x = Math.floor(p.x), z = Math.floor(p.z), y = Math.floor(p.y);
+  world.kind = 2; // stone
+  for (let dx = -1; dx <= 8; dx++) for (let dz = -1; dz <= 1; dz++) {
+    for (let dy = 0; dy < 8; dy++) world.dig({ block: [x + dx, y + dy, z + dz] });
+    if (!world.solid(x + dx, y - 1, z + dz)) world.build({ before: [x + dx, y - 1, z + dz] });
+  }
+  settle(world);
+  return { x, y, z };
+}
+
+test('walking into a step lifts you up it a little at a time, not all at once', () => {
+  const world = createWorld(5);
+  const { x, y, z } = flatStrip(world);
+  world.build({ before: [x + 3, y, z] });
+  const p = world.player;
+  let biggestRise = 0;
+  let last = p.y;
+  for (let i = 0; i < 240; i++) {
+    world.update(STEP, [1, 0]);
+    biggestRise = Math.max(biggestRise, p.y - last);
+    last = p.y;
+  }
+  assert.ok(p.x > x + 3, 'got up the step');
+  assert.ok(biggestRise < 0.2, `rose at most ${biggestRise.toFixed(3)} blocks in one frame (it used to jump a whole block)`);
+});
+
+test('a jump takes you up more than one block and brings you back down; you cannot jump in mid-air', () => {
+  const world = createWorld(5);
+  const { y } = flatStrip(world);
+  const p = world.player;
+  assert.strictEqual(world.jump(), true);
+  let highest = y;
+  let jumpedAgain = false;
+  for (let i = 0; i < 120; i++) {
+    world.update(STEP, null);
+    highest = Math.max(highest, p.y);
+    if (i === 10) jumpedAgain = world.jump();
+  }
+  assert.ok(highest > y + 1.05 && highest < y + 1.8, `rose ${(highest - y).toFixed(2)} blocks`);
+  assert.strictEqual(jumpedAgain, false);
+  assert.ok(Math.abs(p.y - y) < 1e-6, 'back on the ground');
+});
+
+test('flying: you do not fall, you go where you look, and you come back down when it is switched off', () => {
+  const world = createWorld(5);
+  const { y } = flatStrip(world);
+  const p = world.player;
+  world.setFlying(true);
+  for (let i = 0; i < 60; i++) world.update(STEP, null);
+  assert.ok(Math.abs(p.y - y) < 1e-6, 'hovering, not falling');
+  for (let i = 0; i < 60; i++) world.update(STEP, [0.6, 0.8, 0]); // looking up and east
+  assert.ok(p.y > y + 3, `flew up to ${(p.y - y).toFixed(1)} above the ground`);
+  assert.ok(p.x > Math.floor(p.x) - 1 && p.x > 48, 'and forwards');
+  const height = p.y;
+  for (let i = 0; i < 60; i++) world.update(STEP, null);
+  assert.ok(Math.abs(p.y - height) < 1e-6, 'stays up when not moving');
+  world.setFlying(false);
+  let landed = -1;
+  for (let i = 0; i < 300; i++) { world.update(STEP, null); if (world.landed) landed = world.landed; }
+  assert.ok(world.onGround(), 'came back down');
+  assert.ok(landed <= 0, 'and coming down from flying does not count as a fall');
+});
+
+test('falling off something tall is reported as a fall of that height', () => {
+  const world = createWorld(5);
+  const { x, y, z } = flatStrip(world);
+  const p = world.player;
+  Object.assign(p, { y: y + 6, fall: 0 });
+  world.setFlying(true); world.update(STEP, null); world.setFlying(false); // put up in the air...
+  world.update(STEP, [0, 1, 0]);
+  let fell = 0;
+  // ...then a real fall: walk off a tower.
+  for (let dy = 0; dy < 5; dy++) world.build({ before: [x + 5, y + dy, z] });
+  Object.assign(p, { x: x + 5.5, y: y + 5, z: z + 0.5, fall: 0 });
+  for (let i = 0; i < 30; i++) world.update(STEP, null);
+  for (let i = 0; i < 400; i++) { world.update(STEP, [1, 0]); if (world.landed > fell) fell = world.landed; }
+  assert.ok(fell > 4.5 && fell < 5.5, `fell ${fell.toFixed(2)} blocks`);
+});
+
+test('breaking a block gives you that block, building uses one up, and you cannot build what you do not have', () => {
+  const world = createWorld(3);
+  const planks = world.have[kinds.PLANKS];
+  const target = world.aim(world.eyes(), [0.6, -0.8, 0]);
+  const ground = world.get(...target.block);
+  assert.strictEqual(world.build(target), true);
+  assert.strictEqual(world.have[kinds.PLANKS], planks - 1);
+  world.dig(world.aim(world.eyes(), [0.6, -0.8, 0]));
+  assert.strictEqual(world.have[kinds.PLANKS], planks, 'got the planks back');
+  const before = world.have[ground];
+  world.dig(world.aim(world.eyes(), [0.6, -0.8, 0]));
+  assert.strictEqual(world.have[ground], before + 1, 'and the ground block that was dug');
+
+  world.setKind(8); // Lamp: none to begin with
+  assert.strictEqual(world.kindName(), 'Lamp');
+  assert.strictEqual(world.have[kinds.LAMP], 0);
+  assert.strictEqual(world.build(world.aim(world.eyes(), [0.6, -0.8, 0])), false);
+});
+
+test('crafting turns what you have into something else, and only if you have enough', () => {
+  const world = createWorld(3);
+  assert.ok(RECIPES.length >= 3, 'at least three things to craft');
+  const planks = RECIPES.find((r) => r.name === 'Planks');
+  assert.strictEqual(world.canCraft(planks), false, 'no wood yet');
+  assert.strictEqual(world.craft(planks), false);
+  world.have[kinds.WOOD] = 2;
+  const had = world.have[kinds.PLANKS];
+  assert.strictEqual(world.craft(planks), true);
+  assert.strictEqual(world.have[kinds.WOOD], 1);
+  assert.strictEqual(world.have[kinds.PLANKS], had + 4);
+
+  const brick = RECIPES.find((r) => r.name === 'Brick');
+  const stone = world.have[kinds.STONE];
+  assert.strictEqual(world.craft(brick), true);
+  assert.strictEqual(world.have[kinds.STONE], stone - 2);
+
+  const lamp = RECIPES.find((r) => r.name === 'Lamp');
+  world.have[kinds.LEAVES] = 2;
+  assert.strictEqual(world.craft(lamp), true);
+  assert.strictEqual(world.have[kinds.LAMP], 1);
+  assert.strictEqual(world.canCraft(lamp), false, 'the leaves are used up');
+});
+
+test('what you are carrying is saved too', () => {
+  const world = createWorld(3);
+  world.have[kinds.WOOD] = 7;
+  const again = createWorld(3);
+  again.load(world.save());
+  assert.strictEqual(again.have[kinds.WOOD], 7);
 });

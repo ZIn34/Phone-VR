@@ -22,6 +22,8 @@ window.PVR = window.PVR || {};
     [B.kinds.LEAVES]: [[0.22, 0.52, 0.20], [0.19, 0.46, 0.18], [0.16, 0.40, 0.16]],
     [B.kinds.PLANKS]: [[0.80, 0.64, 0.40], [0.76, 0.60, 0.37], [0.70, 0.55, 0.34]],
     [B.kinds.BRICK]: [[0.72, 0.33, 0.27], [0.68, 0.30, 0.25], [0.60, 0.27, 0.22]],
+    [B.kinds.GLASS]: [[0.70, 0.90, 0.98], [0.62, 0.84, 0.95], [0.55, 0.78, 0.90]],
+    [B.kinds.LAMP]: [[1.00, 0.93, 0.55], [1.00, 0.88, 0.45], [0.95, 0.80, 0.40]],
   };
 
   // The six faces of a cube: which way it faces, which colour it uses, how
@@ -270,6 +272,30 @@ window.PVR = window.PVR || {};
     ctx.fillText(words, x, y);
   }
 
+  // The boxes that make up the animals and enemies, for the 3D drawing.
+  PVR.creatureBoxes = function (life) {
+    const boxes = [];
+    const box = (x, y, z, w, h, d, colour) => boxes.push({ low: [x - w / 2, y, z - d / 2], high: [x + w / 2, y + h, z + d / 2], colour });
+    for (const c of life.creatures) {
+      const flash = c.hitAgo < 0.12;
+      const tint = (colour) => (flash ? [1, 1, 1] : colour);
+      // The head sits towards wherever it is heading.
+      const fx = Math.sin(c.heading), fz = -Math.cos(c.heading);
+      if (c.kind === 'creeper') {
+        box(c.x, c.y, c.z, 0.6, 1.15, 0.4, tint([0.30, 0.62, 0.28]));
+        box(c.x, c.y + 1.15, c.z, 0.55, 0.55, 0.55, tint([0.36, 0.72, 0.33]));
+        box(c.x + fx * 0.25, c.y + 1.3, c.z + fz * 0.25, 0.3, 0.2, 0.3, tint([0.08, 0.12, 0.08]));
+      } else {
+        const coat = c.kind === 'pig' ? [0.95, 0.62, 0.66] : [0.93, 0.93, 0.90];
+        const face = c.kind === 'pig' ? [0.90, 0.52, 0.58] : [0.45, 0.42, 0.40];
+        box(c.x, c.y, c.z, 0.5, 0.3, 0.5, tint([coat[0] * 0.8, coat[1] * 0.8, coat[2] * 0.8]));       // legs
+        box(c.x, c.y + 0.3, c.z, 0.9, 0.55, 0.9, tint(coat));                                       // body
+        box(c.x + fx * 0.5, c.y + 0.45, c.z + fz * 0.5, 0.45, 0.45, 0.45, tint(face));              // head
+      }
+    }
+    return boxes;
+  };
+
   // The colour to show for a kind of block in the inventory bar.
   PVR.blockColour = function (kind) {
     const c = COLOURS[kind][kind === B.kinds.GRASS ? 0 : 1];
@@ -278,13 +304,39 @@ window.PVR = window.PVR || {};
 
   // What is painted over the block world: the cross to aim with, the block in
   // hand, and at Levels 2 and 3 what the hand signs do.
-  // hud: { handsOn, sign: 2 or 3 fingers up or 0, fist: 0 to 1 as a fist gets ready to break, aimPoint: where the hand aims }
+  // hud: { handsOn, sign: which hand sign is being seen (2, 3, 'jump', 'fly' or 0),
+  //        fist: 0 to 1 as a fist gets ready to break, aimPoint: where the hand aims,
+  //        life: health and creatures, flying }
   PVR.paintBlocks = function (ctx, width, height, world, hud) {
     const cx = width / 2;
     const cy = height / 2;
     ctx.lineCap = 'round';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+
+    // A red flash round the edge when you are hurt.
+    const life = hud.life;
+    if (life.hurtAgo < 0.4) {
+      const edge = ctx.createRadialGradient(cx, cy, height * 0.35, cx, cy, width * 0.6);
+      edge.addColorStop(0, 'rgba(255, 0, 0, 0)');
+      edge.addColorStop(1, `rgba(255, 0, 0, ${0.6 * (1 - life.hurtAgo / 0.4)})`);
+      ctx.fillStyle = edge;
+      ctx.fillRect(0, 0, width, height);
+    }
+    // Health bar, top left.
+    const share = life.health / 100;
+    ctx.fillStyle = 'rgba(0, 0, 0, .6)';
+    ctx.fillRect(90, 22, 268, 30);
+    ctx.fillStyle = share > 0.5 ? '#3dffb0' : (share > 0.25 ? '#ffb454' : '#ff4d4d');
+    ctx.fillRect(94, 26, 260 * share, 22);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(90, 22, 268, 30);
+    text(ctx, 'HEALTH ' + Math.ceil(life.health), 224, 38, 17);
+    ctx.textAlign = 'left';
+    text(ctx, 'Animals ' + life.knocked.animals + '   Enemies ' + life.knocked.enemies + (hud.flying ? '   FLYING' : ''), 90, 72, 18, hud.flying ? '#3dffb0' : '#fff');
+    ctx.textAlign = 'center';
+    if (life.fellAgo < 3) text(ctx, 'Out of health. Starting again where you began.', cx, cy - 60, 26, '#ffb454');
 
     if (!hud.handsOn) {
       ctx.beginPath();
@@ -310,7 +362,9 @@ window.PVR = window.PVR || {};
       ctx.stroke();
     }
     // What the hand signs do, and which one is being seen right now.
-    const seenSign = hud.fist > 0 ? 'Fist: breaking' : (hud.sign === 2 ? 'Two fingers: walking' : (hud.sign === 3 ? 'Three fingers: next block' : ''));
-    text(ctx, seenSign || 'Pinch: build    Fist: break    2 fingers: walk    3 fingers: next block', cx, height * 0.08, 18, seenSign ? '#3dffb0' : '#fff');
+    const names = { 2: 'Two fingers: walking', 3: 'Three fingers: next block', jump: 'Little finger: jump', fly: 'Index and little finger: ' + (hud.flying ? 'flying' : 'landing') };
+    const seenSign = hud.fist > 0 ? 'Fist: breaking or hitting' : (names[hud.sign] || '');
+    text(ctx, seenSign || 'Pinch: build   Fist: break or hit   2 fingers: walk   3: next block', cx, height * 0.865, 17, seenSign ? '#3dffb0' : '#fff');
+    if (!seenSign) text(ctx, 'Little finger: jump   Index + little finger: fly', cx, height * 0.915, 17);
   };
 })(window.PVR);

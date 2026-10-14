@@ -102,6 +102,7 @@ const worlds = {
   real: Object.assign(PVR.blocks.createWorld(WORLD_SEED + 1, true), { key: WORLD_KEY + '.room' }),
 };
 for (const name in worlds) {
+  worlds[name].life = PVR.survival.createSurvival(worlds[name], Date.now() + name.length); // health, animals and enemies
   worlds[name].savedAt = -1;
   worlds[name].savedTime = 0;
   try {
@@ -121,6 +122,7 @@ const blockButtons = {
   walk: document.getElementById('b-walk'),
   build: document.getElementById('b-build'),
   dig: document.getElementById('b-break'),
+  jump: document.getElementById('b-jump'),
 };
 
 // The inventory bar: one square for each kind of block you can build with.
@@ -131,6 +133,7 @@ const hotbarSlots = PVR.blocks.BUILD_WITH.map((kind, i) => {
   slot.style.background = PVR.blockColour(kind);
   slot.setAttribute('aria-label', PVR.blocks.NAMES[kind]);
   slot.addEventListener('click', () => world.setKind(i));
+  slot.dataset.kind = kind;
   hotbar.append(slot);
   return slot;
 });
@@ -258,7 +261,9 @@ const blockPlay = {
   walking: false,     // the WALK button is held
   stride: 0,          // blocks still to walk from real steps already taken
   sign: 0,            // 2 or 3: that many fingers are being held up
-  signed3: false,     // the three-finger sign has already changed the block this time
+  flySign: 0,         // seconds the flying sign has been held
+  flySigned: false,   // it has already been acted on this time
+  lastJumpTap: 0,     // when JUMP (or the picture) was last tapped, to spot a double tap
   fist: 0,            // seconds a fist has been held over a block
   pinching: [],
 };
@@ -288,7 +293,7 @@ function lookThrough(orientation, focal, width, height, point) {
 function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused) {
   const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
   let walk = blockPlay.walking;
-  blockPlay.sign = 0;
+  if (!handsOn || paused) blockPlay.sign = 0;
   // Real steps already taken are walked off a little each frame.
   if (blockPlay.stride > 0 && !paused) {
     walk = true;
@@ -299,12 +304,26 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
   if (handsOn && !paused) {
     // Hand signs, so nothing needs a touch on the screen:
     //   pinch = build, fist = break, two fingers up = walk, three fingers up = next block.
-    const signOf = (hand) => (hand.up && hand.up[0] && hand.up[1] && !hand.up[3] ? (hand.up[2] ? 3 : 2) : 0);
+    // Which sign a hand is making: 2 or 3 fingers up, 'jump' (little finger alone), 'fly' (index and little finger), or 0.
+    const signOf = (hand) => {
+      const up = hand.up || [];
+      if (up[0] && up[1] && !up[3]) return up[2] ? 3 : 2;
+      if (up[3] && !up[1] && !up[2]) return up[0] ? 'fly' : 'jump';
+      return 0;
+    };
     const fistOf = (hand) => !!hand.up && !hand.up.some(Boolean);
-    blockPlay.sign = seen.reduce((sign, hand) => sign || signOf(hand), 0);
-    if (blockPlay.sign === 2) walk = true;
-    if (blockPlay.sign === 3 && !blockPlay.signed3) world.nextKind();
-    blockPlay.signed3 = blockPlay.sign === 3;
+    const sign = seen.reduce((found, hand) => found || signOf(hand), 0);
+    if (sign === 2) walk = true;
+    if (sign === 3 && blockPlay.sign !== 3) world.nextKind();
+    if (sign === 'jump' && blockPlay.sign !== 'jump') world.jump();
+    // The flying sign has to be held a moment, so a passing hand does not drop you out of the sky.
+    blockPlay.flySign = sign === 'fly' ? blockPlay.flySign + dt : 0;
+    if (blockPlay.flySign >= 0.6 && !blockPlay.flySigned) {
+      world.setFlying(!world.flying);
+      blockPlay.flySigned = true;
+    }
+    if (sign !== 'fly') blockPlay.flySigned = false;
+    blockPlay.sign = sign;
 
     // The hand that is aiming: a fingertip when pointing or pinching, the middle of the hand for a fist.
     const pointer = seen.find((hand) => !signOf(hand));
@@ -314,7 +333,7 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
     // A fist held over a block breaks it, like a punch, and goes on breaking while it is held.
     blockPlay.fist = fist ? blockPlay.fist + dt : 0;
     if (blockPlay.fist >= FIST_HOLD) {
-      world.dig(world.aim(world.eyes(), lookThrough(orientation, focal, width, height, pointer.palm)));
+      hitOrDig(lookThrough(orientation, focal, width, height, pointer.palm));
       blockPlay.fist = FIST_HOLD - FIST_AGAIN;
     }
     // A pinch builds, once, at the moment finger and thumb come together.
@@ -330,19 +349,51 @@ function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused
     blockPlay.fist = 0;
   }
 
-  if (!paused) world.update(dt, walk ? [ahead[0], ahead[2]] : null);
+  if (!paused) {
+    world.update(dt, walk ? ahead : null); // the whole way you are looking, so flying can go up and down
+    world.life.update(dt);
+  }
   const target = aimPoint ? world.aim(world.eyes(), lookThrough(orientation, focal, width, height, aimPoint)) : null;
   blockScene.orientation = orientation;
   blockScene.target = paused ? null : target;
+  blockScene.boxes = PVR.creatureBoxes(world.life);
   saveWorld(performance.now());
-  return { handsOn, sign: blockPlay.sign, fist: Math.min(1, blockPlay.fist / FIST_HOLD), aimPoint };
+  return { handsOn, sign: blockPlay.sign, fist: Math.min(1, blockPlay.fist / FIST_HOLD), aimPoint, life: world.life, flying: world.flying };
 }
 
-// Level 1: BUILD and BREAK act on the block under the cross. Looking alone does nothing.
+// Breaking, or hitting: a creature in the way is hit; otherwise the block is broken.
+function hitOrDig(direction) {
+  if (!world.life.hit(world.eyes(), direction)) world.dig(world.aim(world.eyes(), direction));
+}
+
+// Level 1: BUILD and BREAK act on what is under the cross. Looking alone does nothing.
 function blockAct(build) {
   if (state.experience !== 'block-world' || menu.isOpen()) return;
-  const target = world.aim(world.eyes(), PVR.math.rotate(tracking.orientation(), [0, 0, -1]));
-  if (build) world.build(target); else world.dig(target);
+  const direction = PVR.math.rotate(tracking.orientation(), [0, 0, -1]);
+  if (build) world.build(world.aim(world.eyes(), direction)); else hitOrDig(direction);
+}
+
+// One tap jumps; two taps close together start flying, or stop it.
+function jumpTap() {
+  if (state.experience !== 'block-world' || menu.isOpen()) return;
+  const now = performance.now();
+  if (now - blockPlay.lastJumpTap < 380) {
+    world.setFlying(!world.flying);
+    blockPlay.lastJumpTap = 0;
+    return;
+  }
+  blockPlay.lastJumpTap = now;
+  world.jump();
+}
+
+// What can be crafted, for the menu: only in the Block world where blocks are gathered.
+function recipes() {
+  if (state.experience !== 'block-world' || world.unlimited) return null;
+  const names = PVR.blocks.NAMES;
+  return PVR.blocks.RECIPES.map((recipe) => {
+    const from = Object.keys(recipe.from).map((kind) => recipe.from[kind] + ' ' + names[kind] + ' (have ' + world.have[kind] + ')').join(' + ');
+    return { label: recipe.count + ' ' + recipe.name + ' from ' + from, run: () => world.craft(recipe) };
+  });
 }
 
 // The floating menu lists what works at the current level.
@@ -360,6 +411,7 @@ const menu = PVR.createMenu({
   choose: switchTo,
   recentre: () => tracking.recentre(),
   home: goHome,
+  recipes,
   playAgain,
   canPlayAgain: () => (state.experience === 'follow-the-circle' && game.phase === 'done') || (state.experience === 'blaster-arena' && arena().game.over),
 });
@@ -416,7 +468,15 @@ function fitControls(level, now) {
   blockButtons.dig.textContent = inArena ? 'NEXT' : 'BREAK';
   if (!inArena) arenaPlay.trigger = false;
   hotbar.hidden = !inBlocks;
-  hotbarSlots.forEach((slot, i) => slot.setAttribute('aria-pressed', i === world.kind));
+  hotbarSlots.forEach((slot, i) => {
+    slot.setAttribute('aria-pressed', i === world.kind);
+    // How many you have. In your own room there is no limit, so no number.
+    const count = world.have[slot.dataset.kind];
+    slot.textContent = world.unlimited ? '' : count;
+    slot.classList.toggle('none', !world.unlimited && count === 0);
+  });
+  blockButtons.jump.hidden = !(buttons && inBlocks);
+  blockButtons.jump.textContent = world.flying ? 'LAND' : 'JUMP';
   if (!inBlocks && !inArena) { blockPlay.walking = false; blockPlay.stride = 0; }
   if (view) view.setScene(state.experience === 'block-world' || inArenaGame ? blockScene : null);
   for (const button of sideButtons) {
@@ -517,6 +577,7 @@ const state = {
   bestShown: 0,      // the best to show beside the current go
   select: false,     // a SELECT button was pressed since the last frame
   showUntil: 0,      // during a game, the buttons show until this time
+  lastTap: 0,        // when the picture was last tapped, to spot a double tap
   planted: false,    // whether the circle that starts a go has been put in front of the player
 };
 state.best = state.bestShown = bestScore();
@@ -719,6 +780,7 @@ for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']
   });
 }
 blockButtons.build.addEventListener('click', () => blockAct(true));
+blockButtons.jump.addEventListener('click', jumpTap);
 blockButtons.dig.addEventListener('click', () => {
   if (state.experience === 'blaster-arena') arena().game.nextBlaster(); else blockAct(false);
 });
@@ -754,7 +816,16 @@ canvas.addEventListener('pointermove', (event) => {
 });
 canvas.addEventListener('pointerup', () => {
   if (drag && drag.moved < 10) {
-    if (isGame() && !menu.isOpen()) state.showUntil = performance.now() + SHOW_FOR; else panel.toggle();
+    if (state.experience === 'block-world' && !menu.isOpen() && performance.now() - state.lastTap < 380) {
+      // A double tap on the picture: fly, or land.
+      world.setFlying(!world.flying);
+      state.lastTap = 0;
+    } else if (isGame() && !menu.isOpen()) {
+      state.showUntil = performance.now() + SHOW_FOR;
+      state.lastTap = performance.now();
+    } else {
+      panel.toggle();
+    }
   }
   drag = null;
 });

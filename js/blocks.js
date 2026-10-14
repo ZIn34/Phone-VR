@@ -13,9 +13,18 @@
   const SIZE = 96;
   const HEIGHT = 16;
   const CHUNK = 16;   // the world is drawn in square pieces this wide, so one changed block does not mean redrawing everything
-  const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, PLANKS = 6, BRICK = 7, FLOOR = 8;
-  const NAMES = ['Air', 'Grass', 'Dirt', 'Stone', 'Wood', 'Leaves', 'Planks', 'Brick', 'Floor'];
-  const BUILD_WITH = [PLANKS, BRICK, STONE, WOOD, LEAVES, DIRT, GRASS]; // what you can place, in the order you cycle through
+  const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, PLANKS = 6, BRICK = 7, FLOOR = 8, GLASS = 9, LAMP = 10;
+  const NAMES = ['Air', 'Grass', 'Dirt', 'Stone', 'Wood', 'Leaves', 'Planks', 'Brick', 'Floor', 'Glass', 'Lamp'];
+  const BUILD_WITH = [PLANKS, BRICK, STONE, WOOD, LEAVES, DIRT, GRASS, GLASS, LAMP]; // what you can place, in the order you cycle through
+  // What you start with. Breaking a block gives you that block; building uses one up.
+  const START_WITH = { [PLANKS]: 16, [BRICK]: 8, [STONE]: 8 };
+  // Crafting: what goes in, and what comes out.
+  const RECIPES = [
+    { name: 'Planks', makes: PLANKS, count: 4, from: { [WOOD]: 1 } },
+    { name: 'Brick', makes: BRICK, count: 2, from: { [STONE]: 2 } },
+    { name: 'Glass', makes: GLASS, count: 2, from: { [STONE]: 1, [DIRT]: 1 } },
+    { name: 'Lamp', makes: LAMP, count: 1, from: { [PLANKS]: 1, [LEAVES]: 2 } },
+  ];
 
   const rules = {
     eye: 1.6,        // how high the eyes are above the feet
@@ -24,6 +33,9 @@
     reach: 6,        // how far away a block can be built or broken
     speed: 3,        // blocks walked per second
     gravity: 22,
+    jump: 7.6,       // how fast a jump leaves the ground: enough to clear one block
+    hop: 7.3,        // the smaller jump that carries you up a step you walk into
+    fly: 5,          // blocks a second while flying
     edge: 1.5,       // how close to the edge of the world you can walk
   };
 
@@ -54,6 +66,11 @@
       flat: !!flat,
       // In a flat world the blocks stand in your room, so they are small (about
       // 30 cm) and you are tall beside them. Elsewhere a block is about a metre.
+      flying: false,
+      landed: 0,        // on the frame you land: how many blocks you fell
+      // How many of each kind of block you have. In a flat world or an arena there is nothing to gather, so there is no limit.
+      unlimited: !!flat || !!arena,
+      have: NAMES.map((name, kind) => START_WITH[kind] || 0),
       cover: [],        // in an arena: the walls, each with a place behind it and a place beside it
       pickupSpots: [],  // in an arena: where blasters lie waiting
       body: flat && !arena
@@ -192,11 +209,13 @@
       if (!target || !target.before) return false;
       const [x, y, z] = target.before;
       if (!inside(x, y, z) || world.solid(x, y, z)) return false;
+      if (!world.unlimited && world.have[BUILD_WITH[world.kind]] <= 0) return false; // none left
       cells[at(x, y, z)] = BUILD_WITH[world.kind];
       const inTheWay = blocked(world.player.x, world.player.y, world.player.z);
       cells[at(x, y, z)] = AIR;
       if (inTheWay) return false; // not where you are standing
       set(x, y, z, BUILD_WITH[world.kind]);
+      if (!world.unlimited) world.have[BUILD_WITH[world.kind]]--;
       return true;
     };
 
@@ -205,7 +224,21 @@
       if (!target) return false;
       const [x, y, z] = target.block;
       if (!inside(x, y, z) || y === 0) return false;
+      const kind = world.get(x, y, z);
       set(x, y, z, AIR);
+      if (kind !== FLOOR) world.have[kind]++;
+      return true;
+    };
+
+    // Whether you have what a recipe needs.
+    world.canCraft = function (recipe) {
+      return Object.keys(recipe.from).every((kind) => world.have[kind] >= recipe.from[kind]);
+    };
+    world.craft = function (recipe) {
+      if (!world.canCraft(recipe)) return false;
+      for (const kind in recipe.from) world.have[kind] -= recipe.from[kind];
+      world.have[recipe.makes] += recipe.count;
+      world.changed++;
       return true;
     };
 
@@ -217,38 +250,69 @@
     };
     world.kindName = () => NAMES[BUILD_WITH[world.kind]];
 
-    // Moves the world on by dt seconds. walk is [x, z]: the way to walk, or null to stand still.
+    const onGround = () => blocked(world.player.x, world.player.y - 0.05, world.player.z);
+    let fallFrom = 0;     // the highest you have been since you last stood on something
+    let softLanding = false;
+
+    world.onGround = onGround;
+    world.jump = function () {
+      if (world.flying || !onGround()) return false;
+      world.player.fall = rules.jump;
+      return true;
+    };
+    world.setFlying = function (on) {
+      world.flying = !!on;
+      world.player.fall = 0;
+      softLanding = true; // coming down from flying does not count as a fall
+    };
+
+    // Moves the world on by dt seconds. walk is the way to go, or null to stand
+    // still: [x, z] on foot, or [x, y, z] so that flying can also go up and down.
     world.update = function (dt, walk) {
       const p = world.player;
-      if (walk) {
-        const length = Math.hypot(walk[0], walk[1]) || 1;
-        const dx = walk[0] / length * world.body.speed * dt;
-        const dz = walk[1] / length * world.body.speed * dt;
+      world.landed = 0;
+      const way = walk ? (walk.length === 2 ? [walk[0], 0, walk[1]] : walk) : null;
+      if (way) {
+        const length = (world.flying ? Math.hypot(way[0], way[1], way[2]) : Math.hypot(way[0], way[2])) || 1;
+        const speed = world.flying ? rules.fly : world.body.speed;
+        const dx = way[0] / length * speed * dt;
+        const dz = way[2] / length * speed * dt;
         const low = rules.edge, high = SIZE - rules.edge;
         const go = (x, z) => {
           x = Math.max(low, Math.min(high, x));
           z = Math.max(low, Math.min(high, z));
           if (!blocked(x, p.y, z)) { p.x = x; p.z = z; return true; }
-          // One block high and room above it: step up.
-          const standingOnGround = blocked(p.x, p.y - 0.05, p.z);
-          if (standingOnGround && !blocked(x, p.y + 1.001, z) && !blocked(p.x, p.y + 1.001, p.z)) {
-            p.x = x; p.z = z; p.y = Math.floor(p.y + 0.001) + 1; p.fall = 0;
-            return true;
-          }
+          // A step one block high with room above it: hop up it, rather than being put on top.
+          if (!world.flying && onGround() && !blocked(x, p.y + 1.001, z) && !blocked(p.x, p.y + 1.001, p.z)) p.fall = rules.hop;
           return false;
         };
         // Blocked straight on: slide along whichever way is free.
         if (!go(p.x + dx, p.z + dz)) { if (!go(p.x + dx, p.z)) go(p.x, p.z + dz); }
+        if (world.flying) {
+          const y = p.y + way[1] / length * speed * dt;
+          if (!blocked(p.x, y, p.z) && y < HEIGHT + 6) p.y = y;
+        }
       }
-      // Fall until standing on something.
+      if (world.flying) {
+        fallFrom = p.y;
+        return;
+      }
+      // Rise or fall until standing on something.
       p.fall -= rules.gravity * dt;
-      let y = p.y + Math.max(-0.9, p.fall * dt);
-      if (blocked(p.x, y, p.z)) {
-        y = Math.floor(p.y + 0.001);          // the top of the block underfoot
-        if (blocked(p.x, y, p.z)) y = p.y;    // already resting
-        p.fall = 0;
+      const y = p.y + Math.max(-0.9, Math.min(0.9, p.fall * dt));
+      if (!blocked(p.x, y, p.z)) {
+        p.y = y;
+        fallFrom = Math.max(fallFrom, p.y);
+        return;
       }
-      p.y = y;
+      if (p.fall < 0) {
+        const top = Math.floor(p.y + 0.001);                 // the top of the block underfoot
+        if (!blocked(p.x, top, p.z)) p.y = top;
+        if (!softLanding) world.landed = Math.max(0, fallFrom - p.y);
+        softLanding = false;
+        fallFrom = p.y;
+      }
+      p.fall = 0; // landed, or bumped your head
     };
 
     world.eyes = () => [world.player.x, world.player.y + world.body.eye, world.player.z];
@@ -256,7 +320,7 @@
     // What to keep between visits: only what the player changed, and where they are.
     world.save = function () {
       const p = world.player;
-      return JSON.stringify({ seed, edits, kind: world.kind, player: [p.x, p.y, p.z].map((v) => Math.round(v * 100) / 100) });
+      return JSON.stringify({ seed, edits, kind: world.kind, have: world.have, player: [p.x, p.y, p.z].map((v) => Math.round(v * 100) / 100) });
     };
 
     world.load = function (text) {
@@ -276,6 +340,10 @@
         if (!blocked(x, y, z)) Object.assign(world.player, { x, y, z, fall: 0 });
       }
       if (saved.kind >= 0 && saved.kind < BUILD_WITH.length) world.kind = saved.kind;
+      if (Array.isArray(saved.have)) {
+        saved.have.forEach((count, kind) => { if (kind < NAMES.length && Number.isInteger(count) && count >= 0) world.have[kind] = count; });
+      }
+      fallFrom = world.player.y;
       world.changed++;
       markAll();
       return true;
@@ -285,10 +353,12 @@
     markAll();
     // Start standing on the ground in the middle.
     world.player.y = world.top(Math.floor(world.player.x), Math.floor(world.player.z)) + 1;
+    world.start = [world.player.x, world.player.y, world.player.z];
+    fallFrom = world.player.y;
     return world;
   }
 
-  const api = { createWorld, rules, kinds: { AIR, GRASS, DIRT, STONE, WOOD, LEAVES, PLANKS, BRICK, FLOOR }, NAMES, BUILD_WITH, SIZE, HEIGHT, CHUNK };
+  const api = { createWorld, rules, kinds: { AIR, GRASS, DIRT, STONE, WOOD, LEAVES, PLANKS, BRICK, FLOOR, GLASS, LAMP }, NAMES, BUILD_WITH, RECIPES, SIZE, HEIGHT, CHUNK };
   if (inNode) {
     module.exports = api;
   } else {

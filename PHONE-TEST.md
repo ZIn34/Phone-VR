@@ -52,7 +52,18 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
    **BREAK**. Levels 2 and 3: point at a block and **pinch** to build (keep
    your other fingers open); hold a **fist** over a block to break it.
 6. Leave and come back: what you built should still be there.
-7. If moving the phone about makes you walk by mistake, turn off **Walk by
+7. Jump and fly. Level 1: tap **JUMP**; double tap it (or double tap the
+   picture) to fly, then hold WALK and look where you want to go; double tap
+   again to land. Levels 2 and 3: little finger up to jump; index and little
+   finger up, held for a moment, to fly or land. Walking into a block one
+   high hops you up it.
+8. Health is top left. Animals (pigs, sheep) wander; green enemies come for
+   you and take health when they reach you. Hit them with BREAK (Level 1) or
+   a fist (Levels 2 and 3). Knocking out an animal gives health back.
+9. Breaking a block gives you that block; the numbers in the bar are how
+   many you have. Open the menu and choose **Craft** to turn them into
+   planks, brick, glass or a lamp.
+10. If moving the phone about makes you walk by mistake, turn off **Walk by
    stepping** in Settings.
 
 Please tell me: is it smooth, do real steps move you (and does standing still

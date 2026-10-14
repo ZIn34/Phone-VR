@@ -59,10 +59,11 @@ window.PVR = window.PVR || {};
   //   tiles(): [{ id, label, caption, group, stay }]   what can be chosen at the current level, with
   //       the section it sits in; stay: choosing it leaves the menu open
   //   choose(id), recentre(), home(), canPlayAgain(), playAgain()
+  //   recipes(): [{ label, run }] things that can be crafted right now, or null where there is no crafting
   // }
   PVR.createMenu = function (actions) {
     const settings = PVR.settings;
-    let screen = 'closed';      // 'closed' | 'main' | 'fit'
+    let screen = 'closed';      // 'closed' | 'main' | 'fit' | 'craft'
     let anchorYaw = 0;          // where the menu hangs in the room
     let anchorPitch = 0;
     // blocked: the tile a fingertip was already on when a screen appeared. It
@@ -117,6 +118,8 @@ window.PVR = window.PVR || {};
           ['fit', 'Settings', '', () => show('fit')],
           ['recentre', 'Re-centre', '', () => actions.recentre()],
         ];
+        // In Block world: turning the blocks you have into other things.
+        if (actions.recipes && actions.recipes()) row.unshift(['craft', 'Craft', 'BLOCK WORLD', () => show('craft')]);
         // At home there is nowhere to go back to, and nothing to close.
         if (!atHome) {
           row.push(['home', 'Home', 'BACK TO THIS MENU', () => actions.home()]);
@@ -137,6 +140,17 @@ window.PVR = window.PVR || {};
             tile(id, label, caption, (c - (r.tiles.length - 1) / 2) * (TILE_W + GAP), middle, TILE_W, TILE_H, run);
           });
         }
+        return list;
+      }
+      if (screen === 'craft') {
+        // One wide tile for each thing you can make; choosing it makes one lot.
+        const recipes = actions.recipes() || [];
+        const step = LINE + 0.7 * RAD;
+        const count = recipes.length + 1;
+        recipes.forEach((recipe, i) => {
+          tile('craft' + i, recipe.label, '', 0, ((count - 1) / 2 - i) * step, 36 * RAD, LINE, recipe.run);
+        });
+        tile('back', 'Back', '', 0, ((count - 1) / 2 - recipes.length) * step, 36 * RAD, LINE, () => show('main'));
         return list;
       }
       // Settings: one line each, - on the left and + on the right.
