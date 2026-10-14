@@ -144,6 +144,7 @@ function fitControls(level, now) {
   }
   // While playing a game the other buttons stay off the screen.
   screens.vr.classList.toggle('bare', isGame() && !menu.isOpen() && now > state.showUntil);
+  screens.vr.classList.toggle('one', !PVR.settings.lenses);
   return buttons;
 }
 
@@ -306,7 +307,8 @@ async function askForCamera() {
   }
   return navigator.mediaDevices.getUserMedia({
     audio: false,
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    // Full HD, so the picture stays sharp when it is zoomed to match the distance from your face.
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
   });
 }
 

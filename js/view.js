@@ -1,13 +1,16 @@
 'use strict';
 
-// Draws the VR view on one WebGL canvas: the same scene twice, once for each
-// eye. The scene is the camera picture with an optional overlay painted on top.
+// Draws the VR view on one WebGL canvas. Normally that is one big picture
+// filling the screen; with a lens holder it is the same scene twice, once for
+// each eye. The scene is the camera picture with an optional overlay on top.
 //
 // Scene units: the picture is 2 units tall (-1 at the bottom, +1 at the top).
 window.PVR = window.PVR || {};
 
 (function (PVR) {
   const OVERLAY_HEIGHT = 640;
+  const PIXELS_PER_CM = 160 / 2.54; // a web page cannot measure the screen; phones are close to this
+  const MAX_ZOOM = 3;               // beyond this the camera picture is too blurry to be useful
 
   // Roughly how wide a phone's main back camera sees along the long side of a
   // video picture. Used so things drawn over the camera line up with the room.
@@ -59,16 +62,33 @@ window.PVR = window.PVR || {};
     return texture;
   }
 
-  // Where each eye's picture goes on a canvas of W x H pixels.
+  // Where the picture, or each eye's picture, goes on a canvas of W x H pixels.
   PVR.eyeLayout = function (W, H, settings) {
+    if (!settings.lenses) {
+      return { halfWidth: W / H, unit: H / 2, curve: 0, eyes: [{ x: W / 2, y: H / 2, left: 0, width: W }] };
+    }
     const centreY = H / 2 + settings.offsetY * H;
     const shift = settings.separation * W / 2;
+    const half = Math.floor(W / 2);
     return {
       halfWidth: (W / 2) / H,
       unit: (H / 2) * settings.size,
-      left: { x: W / 2 - shift, y: centreY },
-      right: { x: W / 2 + shift, y: centreY },
+      curve: settings.distortion ? settings.strength : 0,
+      eyes: [
+        { x: W / 2 - shift, y: centreY, left: 0, width: half },
+        { x: W / 2 + shift, y: centreY, left: half, width: W - half },
+      ],
     };
+  };
+
+  // How much to zoom the one big picture so that it works like a window: what
+  // you see on the phone is the size it would be if the phone were a hole at
+  // that distance from your face. focal is the picture's scale with no zoom.
+  PVR.windowZoom = function (settings, screenHeightPx, focal) {
+    if (settings.lenses) return 1;
+    const screenHeightCm = screenHeightPx / PIXELS_PER_CM;
+    const windowFocal = 2 * settings.distance / screenHeightCm;
+    return Math.max(1, Math.min(MAX_ZOOM, windowFocal / focal));
   };
 
   // Returns null when this browser cannot draw with WebGL.
@@ -129,6 +149,7 @@ window.PVR = window.PVR || {};
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
         // Fill the picture with the camera without stretching it; crop what spills over.
         cover = Math.max(layout.halfWidth / (vw / 2), 1 / (vh / 2));
+        cover *= PVR.windowZoom(settings, canvas.clientHeight, cover * Math.max(vw, vh) / 2 / Math.tan(CAMERA_FOV / 2));
         videoScale = [1 / (cover * vw), 1 / (cover * vh)];
       }
 
@@ -150,17 +171,16 @@ window.PVR = window.PVR || {};
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay);
       }
 
-      const k = settings.distortion ? settings.strength : 0;
+      const k = layout.curve;
       gl.uniform1f(uniform.uUnit, layout.unit);
       gl.uniform1f(uniform.uHalfWidth, layout.halfWidth);
       gl.uniform2f(uniform.uVideoScale, videoScale[0], videoScale[1]);
       gl.uniform2f(uniform.uK, k * 0.5, k * 0.2);
 
       gl.enable(gl.SCISSOR_TEST);
-      const half = Math.floor(W / 2);
-      for (const [eye, x, width] of [[layout.left, 0, half], [layout.right, half, W - half]]) {
-        gl.viewport(x, 0, width, H);
-        gl.scissor(x, 0, width, H);
+      for (const eye of layout.eyes) {
+        gl.viewport(eye.left, 0, eye.width, H);
+        gl.scissor(eye.left, 0, eye.width, H);
         gl.uniform2f(uniform.uCentre, eye.x, eye.y);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       }

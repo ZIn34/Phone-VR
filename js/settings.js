@@ -1,6 +1,7 @@
 'use strict';
 
-// Eye-fit settings: where and how big the two eye pictures are drawn.
+// Settings: how you play, how far the phone is from your face, and (for a
+// lens holder) where and how big the two eye pictures are drawn.
 // They are kept on this phone so they are still there next time.
 window.PVR = window.PVR || {};
 
@@ -9,6 +10,8 @@ window.PVR = window.PVR || {};
 
   PVR.defaultSettings = {
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
+    distance: 25,       // how far the phone is held from your face, in centimetres
+    lenses: false,      // false: one big picture. true: two eye pictures, for a holder with lenses
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
     size: 1,            // 1 = the picture is as tall as the screen
     offsetY: 0,         // up (+) or down (-), as a share of the screen height
@@ -19,6 +22,7 @@ window.PVR = window.PVR || {};
   // Lowest value, highest value, and how much one press of - or + changes it.
   PVR.settingLimits = {
     level: { min: 1, max: 3, step: 1 },
+    distance: { min: 10, max: 50, step: 5 },
     separation: { min: 0.3, max: 0.7, step: 0.01 },
     size: { min: 0.5, max: 1.5, step: 0.02 },
     offsetY: { min: -0.25, max: 0.25, step: 0.01 },
@@ -47,6 +51,7 @@ window.PVR = window.PVR || {};
       }
     }
     if (typeof saved.distortion === 'boolean') PVR.settings.distortion = saved.distortion;
+    if (typeof saved.lenses === 'boolean') PVR.settings.lenses = saved.lenses;
   };
 
   PVR.saveSettings = function () {
@@ -57,9 +62,10 @@ window.PVR = window.PVR || {};
     }
   };
 
-  // Puts the eye fit back to its starting values. How you play is left alone.
+  // Puts the numbers back to their starting values. How you play, and whether
+  // you use a lens holder, are left alone.
   PVR.resetSettings = function () {
-    Object.assign(PVR.settings, PVR.defaultSettings, { level: PVR.settings.level });
+    Object.assign(PVR.settings, PVR.defaultSettings, { level: PVR.settings.level, lenses: PVR.settings.lenses });
     PVR.saveSettings();
   };
 

@@ -206,6 +206,9 @@ html, body {
   border-radius: 10px;
 }
 
+/* One big picture has no line down the middle. */
+#vr.one .divider { display: none; }
+
 #ready { margin-top: 1.5rem; }
 .start-note { margin: .7rem 0 0; color: var(--muted); font-size: .95rem; }
 

@@ -1,21 +1,25 @@
 'use strict';
 
-// The eye-fit settings panel. It opens on top of the VR view, so every change
-// can be seen in the two pictures straight away.
+// The settings panel. It opens on top of the VR view, so every change can be
+// seen in the picture straight away.
 window.PVR = window.PVR || {};
 
 (function (PVR) {
   const percent = (value) => Math.round(value * 100) + '%';
+  // lenses: true = only shown with a lens holder, false = only shown without one.
   const ROWS = [
     { name: 'level', label: 'How you play', less: 'Lower level', more: 'Higher level', show: (value) => 'Level ' + value },
-    { name: 'separation', label: 'Eye distance', less: 'Closer together', more: 'Further apart', show: percent },
-    { name: 'size', label: 'Picture size', less: 'Smaller', more: 'Bigger', show: percent },
+    { name: 'distance', label: 'Distance from face', less: 'Closer', more: 'Further', show: (value) => value + ' cm', lenses: false },
+    { name: 'separation', label: 'Eye distance', less: 'Closer together', more: 'Further apart', show: percent, lenses: true },
+    { name: 'size', label: 'Picture size', less: 'Smaller', more: 'Bigger', show: percent, lenses: true },
     {
-      name: 'offsetY', label: 'Up / down', less: 'Down', more: 'Up',
+      name: 'offsetY', label: 'Up / down', less: 'Down', more: 'Up', lenses: true,
       show: (value) => (value === 0 ? 'Middle' : (value > 0 ? 'Up ' : 'Down ') + Math.abs(Math.round(value * 100))),
     },
-    { name: 'strength', label: 'Correction strength', less: 'Weaker', more: 'Stronger', show: percent },
+    { name: 'strength', label: 'Correction strength', less: 'Weaker', more: 'Stronger', show: percent, lenses: true },
   ];
+  // Whether a row belongs on screen with the current kind of picture.
+  PVR.settingShown = (row) => row.lenses === undefined || row.lenses === PVR.settings.lenses;
   PVR.settingRows = ROWS; // the hand-worked menu shows the same settings
   const HOLD_DELAY = 400;  // ms a button is held before it starts repeating
   const HOLD_EVERY = 90;
@@ -25,9 +29,16 @@ window.PVR = window.PVR || {};
     const values = {};
     const steppers = {};
     const toggle = panel.querySelector('#lens-toggle');
+    const holder = panel.querySelector('#holder-toggle');
 
     function refresh() {
-      for (const row of ROWS) values[row.name].textContent = row.show(settings[row.name]);
+      for (const row of ROWS) {
+        values[row.name].textContent = row.show(settings[row.name]);
+        steppers[row.name].hidden = !PVR.settingShown(row);
+      }
+      holder.textContent = settings.lenses ? 'On' : 'Off';
+      holder.setAttribute('aria-pressed', settings.lenses);
+      panel.querySelector('#lens-row').hidden = !settings.lenses;
       toggle.textContent = settings.distortion ? 'On' : 'Off';
       toggle.setAttribute('aria-pressed', settings.distortion);
       steppers.strength.classList.toggle('disabled', !settings.distortion);
@@ -82,6 +93,11 @@ window.PVR = window.PVR || {};
       if (row.name === 'strength') lensRow.after(line); else rows.insertBefore(line, lensRow);
     }
 
+    holder.addEventListener('click', () => {
+      settings.lenses = !settings.lenses;
+      PVR.saveSettings();
+      refresh();
+    });
     toggle.addEventListener('click', () => {
       settings.distortion = !settings.distortion;
       PVR.saveSettings();

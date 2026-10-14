@@ -26,6 +26,8 @@ window.PVR = window.PVR || {};
   const TILE_H = 6.5 * RAD;
   const GAP = 1.5 * RAD;
   const LINE = 4.6 * RAD;    // height of one settings line
+  const FOCAL_FOR_SIZES = 2.79;
+  const DROP = 4 * RAD;
 
   function text(ctx, words, x, y, size, colour) {
     ctx.font = `bold ${Math.round(size)}px sans-serif`;
@@ -83,8 +85,8 @@ window.PVR = window.PVR || {};
 
     function open(orientation) {
       anchorYaw = math.yawOf(orientation);
-      // A little below where you are looking, but never down at the floor or up at the ceiling.
-      anchorPitch = Math.max(-12 * RAD, Math.min(10 * RAD, math.pitchOf(orientation) - 4 * RAD));
+      // Level with where you are looking, but never down at the floor or up at the ceiling.
+      anchorPitch = Math.max(-10 * RAD, Math.min(12 * RAD, math.pitchOf(orientation)));
       palmTime = restOpen = 0;
       show('main');
     }
@@ -92,7 +94,7 @@ window.PVR = window.PVR || {};
     // The tiles of the current screen. x and y are angles from the middle of the menu.
     function layout() {
       const list = [];
-      const tile = (id, label, caption, x, y, w, h, run, repeat) => list.push({ id, label, caption, x, y, w, h, run, repeat });
+      const tile = (id, label, caption, x, y, w, h, run, repeat) => list.push({ id, label, caption, x, y, w, h, run, repeat, line: h === LINE });
       if (screen === 'main') {
         const rows = [];
         const activities = actions.tiles();
@@ -100,7 +102,7 @@ window.PVR = window.PVR || {};
           rows.push(activities.slice(i, i + 3).map((a) => [a.id, a.label, a.caption, () => { actions.choose(a.id); show('closed'); }]));
         }
         const row = [
-          ['fit', 'Settings', 'EYE FIT AND LEVEL', () => show('fit')],
+          ['fit', 'Settings', '', () => show('fit')],
           ['recentre', 'Re-centre', '', () => actions.recentre()],
         ];
         // At home there is nowhere to go back to, and nothing to close.
@@ -124,9 +126,11 @@ window.PVR = window.PVR || {};
       // Settings: one line each, - on the left and + on the right.
       const lines = [];
       for (const row of PVR.settingRows) {
-        if (row.name === 'strength') lines.push({ toggle: true });
+        if (!PVR.settingShown(row)) continue;
+        if (row.name === 'strength') lines.push({ toggle: 'distortion', label: 'Lens correction' });
         lines.push({ row });
       }
+      lines.push({ toggle: 'lenses', label: 'Lens holder (two pictures)' });
       lines.push({ back: true });
       const step = LINE + 0.7 * RAD;
       lines.forEach((line, i) => {
@@ -137,8 +141,8 @@ window.PVR = window.PVR || {};
           tile(name + '+', '+', '', 13 * RAD, y, 7 * RAD, LINE, () => change(name, 1), true);
           list.push({ words: line.row.label + ': ' + line.row.show(settings[name]), x: 0, y });
         } else if (line.toggle) {
-          tile('lens', 'Lens correction: ' + (settings.distortion ? 'On' : 'Off'), '', 0, y, 33 * RAD, LINE, () => {
-            settings.distortion = !settings.distortion;
+          tile(line.toggle, line.label + ': ' + (settings[line.toggle] ? 'On' : 'Off'), '', 0, y, 33 * RAD, LINE, () => {
+            settings[line.toggle] = !settings[line.toggle];
             PVR.saveSettings();
           });
         } else {
@@ -240,9 +244,15 @@ window.PVR = window.PVR || {};
           return;
         }
 
-        // Open: work out where every tile is on the canvas.
+        // Open: work out where every tile is on the canvas. Sizes were chosen
+        // for a picture about 40 degrees tall; they shrink or grow with the
+        // picture, so the menu always takes up the same share of the screen.
+        const fit = FOCAL_FOR_SIZES / focal;
         const tiles = layout();
         for (const t of tiles) {
+          t.x *= fit;
+          t.y = (t.y - DROP) * fit; // the whole menu sits a little below eye level
+          if (t.w) { t.w *= fit; t.h *= fit; }
           if (t.words) {
             t.at = spot(anchorYaw + t.x, anchorPitch + t.y);
             continue;
@@ -305,7 +315,7 @@ window.PVR = window.PVR || {};
             text(ctx, t.caption, x, y - tall * 0.24, Math.max(10, tall * 0.13), '#9aa3b5');
             text(ctx, t.label, x, y + tall * 0.12, Math.max(13, tall * 0.2));
           } else {
-            text(ctx, t.label, x, y, t.label.length <= 1 ? tall * 0.6 : Math.max(13, tall * (t.h === LINE ? 0.34 : 0.22)));
+            text(ctx, t.label, x, y, t.label.length <= 1 ? tall * 0.6 : Math.max(13, tall * (t.line ? 0.34 : 0.22)));
           }
         }
 
@@ -323,7 +333,7 @@ window.PVR = window.PVR || {};
           ctx.lineWidth = 3;
           ctx.stroke();
         }
-        text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.82, 19, '#3dffb0');
+        text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.12, 19, '#3dffb0');
 
         // Press last, so a tile that changes the screen does not disturb this frame's drawing.
         for (const t of pressed) t.run();
