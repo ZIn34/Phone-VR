@@ -29,6 +29,7 @@ window.PVR = window.PVR || {};
   const FOCAL_FOR_SIZES = 2.79;
   const DROP = 0.5 * RAD;
   const HEADING = 2.2 * RAD;   // height of a section heading
+  const HANDLE_H = 3.4 * RAD;  // height of the handle you grab to move the menu
 
   function text(ctx, words, x, y, size, colour) {
     ctx.font = `bold ${Math.round(size)}px sans-serif`;
@@ -69,6 +70,7 @@ window.PVR = window.PVR || {};
     // by accident. undefined = not looked at yet since the screen appeared.
     const rest = { id: null, time: 0, done: false, blocked: undefined };
     let atHome = false;         // at the home menu, which cannot be closed
+    let moving = null;          // the menu is being carried: 'aim' (by where you look) or the number of the hand pinching its handle
     let pinching = [];          // per hand: is it pinching right now
     let palmTime = 0;
     let restOpen = 0;
@@ -83,6 +85,7 @@ window.PVR = window.PVR || {};
       rest.id = null;
       rest.time = 0;
       rest.blocked = undefined;
+      moving = null;
     }
 
     function open(orientation) {
@@ -262,10 +265,47 @@ window.PVR = window.PVR || {};
         // picture, so the menu always takes up the same share of the screen.
         const fit = FOCAL_FOR_SIZES / focal;
         const tiles = layout();
+        // The handle at the top: grab it to carry the whole menu somewhere else.
+        const top = Math.max(...tiles.map((t) => (t.w ? t.y + t.h / 2 : t.y + 1.3 * RAD)));
+        const handle = {
+          id: 'move', handle: true, line: true, caption: '', x: 0, y: top + 0.9 * RAD + HANDLE_H / 2, w: 18 * RAD, h: HANDLE_H,
+          label: moving === null ? '✥ MOVE MENU' : (moving === 'aim' ? 'SELECT to put down' : 'Let go to put down'),
+          run() {},
+        };
+        tiles.push(handle);
         for (const t of tiles) {
           t.x *= fit;
           t.y = (t.y - DROP) * fit; // the whole menu sits a touch below eye level
           if (t.w) { t.w *= fit; t.h *= fit; }
+        }
+
+        // While it is being carried, the menu goes wherever the cross or the pinching fingertip points.
+        if (moving !== null) {
+          let towards = null;
+          if (moving === 'aim') {
+            towards = [math.yawOf(orientation), math.pitchOf(orientation)];
+          } else if (input.hands[moving] && pinching[moving]) {
+            const tip = input.hands[moving].tip;
+            const x = (tip[0] - width / 2) / unit / focal;
+            const y = (height / 2 - tip[1]) / unit / focal;
+            const length = Math.hypot(x, y, 1);
+            const d = math.rotate(orientation, [x / length, y / length, -1 / length]);
+            towards = [Math.atan2(d[0], -d[2]), Math.asin(Math.max(-1, Math.min(1, d[1])))];
+          }
+          if (towards) {
+            anchorYaw = towards[0] - handle.x;
+            anchorPitch = Math.max(-60 * RAD, Math.min(60 * RAD, towards[1] - handle.y));
+          }
+          // Put down: SELECT again, or the pinch let go.
+          if (moving === 'aim' ? input.select : !towards) {
+            moving = null;
+            input = Object.assign({}, input, { select: false }); // that press only put the menu down
+            rest.blocked = undefined;
+          }
+        }
+        const carried = moving !== null;
+
+        for (const t of tiles) {
           if (t.words) {
             t.at = spot(anchorYaw + t.x, anchorPitch + t.y);
             continue;
@@ -283,11 +323,22 @@ window.PVR = window.PVR || {};
         // Looking at a tile only shows which one a SELECT press would choose.
         const pressed = new Set();
         const aimed = input.handsOn ? null : under(middle) || null;
-        if (aimed && input.select) pressed.add(aimed);
         const pointing = input.hands.map((hand) => under(hand.tip));
-        pointing.forEach((t, i) => { if (t && pinched[i]) pressed.add(t); });
-        const rested = pointing.find(Boolean) || null;
-        if (dwell(rest, rested ? rested.id : null, dt, REST, rested && rested.repeat)) pressed.add(rested);
+        if (carried) {
+          // Nothing is chosen while the menu is being carried.
+          dwell(rest, null, dt, REST, false);
+        } else {
+          if (aimed && input.select) pressed.add(aimed);
+          pointing.forEach((t, i) => { if (t && pinched[i]) pressed.add(t); });
+          const rested = pointing.find((t) => t && !t.handle) || null;
+          if (dwell(rest, rested ? rested.id : null, dt, REST, rested && rested.repeat)) pressed.add(rested);
+          // Picking the menu up by its handle: SELECT with the cross on it, or a pinch on it.
+          if (pressed.has(handle)) {
+            pressed.delete(handle);
+            const hand = pointing.findIndex((t, i) => t === handle && pinched[i]);
+            moving = hand >= 0 ? hand : 'aim';
+          }
+        }
 
         ctx.fillStyle = 'rgba(0, 0, 0, .55)';
         ctx.fillRect(0, 0, width, height);
@@ -298,7 +349,7 @@ window.PVR = window.PVR || {};
           }
           if (!t.corners) continue;
           const c = t.corners;
-          const lit = t === aimed || t.id === rest.id;
+          const lit = t === aimed || t.id === rest.id || (t.handle && moving !== null);
           ctx.beginPath();
           ctx.moveTo(c[0][0], c[0][1]);
           for (let i = 1; i < 4; i++) ctx.lineTo(c[i][0], c[i][1]);
