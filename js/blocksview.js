@@ -142,6 +142,7 @@ window.PVR = window.PVR || {};
       linePlace: gl.getAttribLocation(lines, 'aPlace'),
     };
     const lineBuffer = gl.createBuffer();
+    const boxBuffer = gl.createBuffer();
     const piecesOf = new WeakMap(); // for each world: "cx,cz" -> { buffer, vertices }
     const SEE = 26;             // pieces further away than this are lost in the haze, so they are not drawn
 
@@ -150,6 +151,7 @@ window.PVR = window.PVR || {};
       seeThrough: false,          // true: only the blocks are drawn, for laying over the camera picture
       orientation: [0, 0, 0, 1],  // which way the player is looking
       target: null,               // the block being aimed at, to outline
+      boxes: [],                  // loose boxes to draw this frame: { low: [x, y, z], high: [x, y, z], colour: [r, g, b] }
 
       // How zoomed the world is. A made-up world is shown wider than a true
       // window would be, or you would only ever see a sliver of it.
@@ -218,6 +220,26 @@ window.PVR = window.PVR || {};
           gl.vertexAttribPointer(at.uv, 2, gl.FLOAT, false, 32, 12);
           gl.vertexAttribPointer(at.colour, 3, gl.FLOAT, false, 32, 20);
           gl.drawArrays(gl.TRIANGLES, 0, piece.vertices);
+        }
+        if (scene.boxes.length) {
+          const data = [];
+          for (const box of scene.boxes) {
+            const size = [0, 1, 2].map((i) => box.high[i] - box.low[i]);
+            for (const face of FACES) {
+              const push = (corner) => data.push(
+                box.low[0] + corner[0] * size[0], box.low[1] + corner[1] * size[1], box.low[2] + corner[2] * size[2],
+                corner[3], corner[4], box.colour[0] * face.light, box.colour[1] * face.light, box.colour[2] * face.light);
+              const q = face.corners;
+              push(q[0]); push(q[1]); push(q[2]);
+              push(q[0]); push(q[2]); push(q[3]);
+            }
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, boxBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.DYNAMIC_DRAW);
+          gl.vertexAttribPointer(at.place, 3, gl.FLOAT, false, 32, 0);
+          gl.vertexAttribPointer(at.uv, 2, gl.FLOAT, false, 32, 12);
+          gl.vertexAttribPointer(at.colour, 3, gl.FLOAT, false, 32, 20);
+          gl.drawArrays(gl.TRIANGLES, 0, data.length / 8);
         }
         gl.disableVertexAttribArray(at.uv);
         gl.disableVertexAttribArray(at.colour);

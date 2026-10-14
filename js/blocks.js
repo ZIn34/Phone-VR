@@ -38,7 +38,9 @@
     };
   }
 
-  function createWorld(seed, flat) {
+  // flat: no land, just a floor you cannot see. arena: a level floor with walls
+  // to hide behind, for Blaster arena (flat as well: the floor cannot be seen).
+  function createWorld(seed, flat, arena) {
     const cells = new Uint8Array(SIZE * SIZE * HEIGHT);
     const edits = {}; // every block the player has changed: place in the list -> kind
     const world = {
@@ -52,7 +54,9 @@
       flat: !!flat,
       // In a flat world the blocks stand in your room, so they are small (about
       // 30 cm) and you are tall beside them. Elsewhere a block is about a metre.
-      body: flat
+      cover: [],        // in an arena: the walls, each with a place behind it and a place beside it
+      pickupSpots: [],  // in an arena: where blasters lie waiting
+      body: flat && !arena
         ? { eye: 5, tall: 5.2, reach: 14, speed: 5, stride: 2.3 }
         : { eye: rules.eye, tall: rules.tall, reach: rules.reach, speed: rules.speed, stride: 0.8 },
       dirty: new Set(), // the pieces of the world whose drawing is out of date: "cx,cz"
@@ -69,8 +73,9 @@
     world.solid = (x, y, z) => world.get(x, y, z) !== AIR;
 
     function generate() {
-      if (flat) {
-        for (let x = 0; x < SIZE; x++) for (let z = 0; z < SIZE; z++) cells[at(x, 0, z)] = FLOOR;
+      if (flat || arena) {
+        for (let x = 0; x < SIZE; x++) for (let z = 0; z < SIZE; z++) cells[at(x, 0, z)] = flat ? FLOOR : STONE;
+        if (arena) buildArena();
         return;
       }
       const random = randomFrom(seed);
@@ -100,6 +105,30 @@
         }
         for (let dy = 1; dy <= trunk; dy++) if (inside(x, base + dy, z)) cells[at(x, base + dy, z)] = WOOD;
       }
+    }
+
+    // Walls three wide and two high in a ring round the middle, each side-on
+    // to the middle so a robot can stand hidden behind it and step out beside it.
+    function buildArena() {
+      const random = randomFrom(seed);
+      const mid = SIZE / 2;
+      const walls = 8;
+      for (let n = 0; n < walls; n++) {
+        const angle = (n + 0.5 * random()) / walls * Math.PI * 2;
+        const far = 8 + random() * 5;
+        const x = Math.round(mid + Math.sin(angle) * far);
+        const z = Math.round(mid - Math.cos(angle) * far);
+        // Run the wall across the line of sight from the middle.
+        const alongX = Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle));
+        for (let i = -1; i <= 1; i++) for (let y = 1; y <= 2; y++) cells[at(alongX ? x + i : x, y, alongX ? z : z + i)] = n % 2 ? BRICK : PLANKS;
+        const awayX = Math.sign(Math.round(Math.sin(angle) * 10)) || 1;
+        const awayZ = Math.sign(Math.round(-Math.cos(angle) * 10)) || 1;
+        const behind = alongX ? [x + 0.5, 1, z + awayZ + 0.5] : [x + awayX + 0.5, 1, z + 0.5];
+        const side = n % 2 ? 2.2 : -2.2;
+        const beside = alongX ? [behind[0] + side, 1, behind[2]] : [behind[0], 1, behind[2] + side];
+        world.cover.push({ behind, beside });
+      }
+      world.pickupSpots = [[mid + 4.5, 1.2, mid + 4.5], [mid - 5.5, 1.2, mid - 3.5]];
     }
 
     // The height of the highest block in a column, or -1 if it is empty.

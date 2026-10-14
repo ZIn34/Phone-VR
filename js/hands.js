@@ -74,7 +74,12 @@ window.PVR = window.PVR || {};
       try {
         const found = landmarker.detectForVideo(video, now);
         const sides = found.handedness || found.handednesses || [];
+        const solid = found.worldLandmarks || [];
         hands.list = found.landmarks.map((points, i) => {
+          // The index finger in 3D (so it still works pointed away from the camera):
+          // 1 when it is straight, much less when it is curled like pulling a trigger.
+          const w = solid[i];
+          const gap = (a, b) => (w ? Math.hypot(w[a].x - w[b].x, w[a].y - w[b].y, w[a].z - w[b].z) : Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y));
           const far = (a, b) => Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y);
           // Which way the hand is turned: the sign of this flips between palm and back,
           // and is opposite for left and right hands.
@@ -82,6 +87,9 @@ window.PVR = window.PVR || {};
           const right = sides[i] && sides[i][0] && sides[i][0].categoryName === 'Right';
           return {
             tip: [points[8].x, points[8].y],   // end of the index finger
+            wrist: [points[0].x, points[0].y],
+            knuckle: [points[5].x, points[5].y], // where the index finger joins the hand
+            straight: gap(8, 5) / (gap(5, 6) + gap(6, 7) + gap(7, 8)),
             palm: [(points[0].x + points[5].x + points[17].x) / 3, (points[0].y + points[5].y + points[17].y) / 3],
             // Thumb and index fingertip close together, measured against the size of the hand.
             pinch: far(4, 8) / far(0, 9),

@@ -8,6 +8,7 @@ window.PVR = window.PVR || {};
 PVR.experiences = {
   'follow-the-circle': { title: 'Follow the circle', group: 'Games' },
   'block-world': { title: 'Block world', group: 'Games' },
+  'blaster-arena': { title: 'Blaster arena', group: 'Games' },
   'see-your-room': { title: 'See your room', group: 'Testing' },
   'pop-the-targets': { title: 'Pop the targets', group: 'Testing' },
 };

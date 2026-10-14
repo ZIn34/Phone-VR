@@ -69,6 +69,7 @@ game.onFinish = (score) => {
 };
 
 function playAgain() {
+  if (state.experience === 'blaster-arena') restartArena();
   playAgainButton.hidden = true;
   state.bestShown = state.best;
   state.planted = false;
@@ -143,12 +144,113 @@ window.addEventListener('devicemotion', (event) => {
   const r = event.rotationRate || {};
   const turn = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
   // Each real step walks one stride; a few can queue up, no more.
-  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + world.body.stride, world.body.stride * 3);
+  const body = (state.experience === 'blaster-arena' ? arena().land : world).body;
+  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + body.stride, body.stride * 3);
 });
 
 // Whether you are somewhere you can walk about in.
 function walkable() {
-  return state.experience === 'block-world';
+  return state.experience === 'block-world' || state.experience === 'blaster-arena';
+}
+
+// Blaster arena: one arena for Simulation and one, with a floor you cannot see, for Real life.
+const ARENA_BEST_KEY = 'phone-vr.blaster-arena.best.v1';
+const arenas = {};
+for (const name of ['sim', 'real']) {
+  const land = PVR.blocks.createWorld(WORLD_SEED + 7, name === 'real', true);
+  arenas[name] = { land, game: PVR.shooter.createShooter(land, Date.now()) };
+  arenas[name].game.onOver = (score) => {
+    arenaPlay.bestShown = arenaPlay.best;
+    if (score > arenaPlay.best) {
+      arenaPlay.best = score;
+      try {
+        localStorage.setItem(ARENA_BEST_KEY, String(score));
+      } catch (err) {
+        // Nowhere to keep it: it still counts until the page is closed.
+      }
+    }
+  };
+}
+const arenaPlay = {
+  trigger: false,     // the FIRE button is held
+  pulled: false,      // the trigger (button or finger) was down last frame
+  flashes: [],        // shots just fired, for drawing
+  overFor: 0,         // seconds since the game ended
+  signed3: false,
+  best: 0,
+  bestShown: 0,
+};
+try {
+  arenaPlay.best = arenaPlay.bestShown = Math.max(0, parseInt(localStorage.getItem(ARENA_BEST_KEY), 10) || 0);
+} catch (err) {
+  // No saved best.
+}
+const arena = () => (PVR.settings.real ? arenas.real : arenas.sim);
+
+function restartArena() {
+  const { land, game: shooter } = arena();
+  Object.assign(land.player, { x: land.size / 2 + 0.5, y: 1, z: land.size / 2 + 0.5, fall: 0 });
+  shooter.restart();
+  arenaPlay.bestShown = arenaPlay.best;
+  arenaPlay.flashes = [];
+  arenaPlay.overFor = 0;
+}
+
+// One frame of Blaster arena. Returns what the painter needs to draw over it.
+function playArena(dt, orientation, focal, width, height, seen, handsOn, paused) {
+  const { land, game: shooter } = arena();
+  const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
+  let walk = blockPlay.walking;
+  let sign = 0;
+  if (blockPlay.stride > 0 && !paused) {
+    walk = true;
+    blockPlay.stride = Math.max(0, blockPlay.stride - land.body.speed * dt);
+  }
+
+  // Where the blaster points, and whether its trigger is down.
+  let aim = [width / 2, height / 2];
+  let hand = null;
+  let trigger = arenaPlay.trigger;
+  if (handsOn) {
+    const signOf = (h) => (h.up && h.up[0] && h.up[1] && !h.up[3] ? (h.up[2] ? 3 : 2) : 0);
+    sign = seen.reduce((found, h) => found || signOf(h), 0);
+    if (sign === 2) walk = true;
+    if (sign === 3 && !arenaPlay.signed3 && !paused) shooter.nextBlaster();
+    arenaPlay.signed3 = sign === 3;
+    // The hand holding the blaster: it points where the hand is on the screen,
+    // and curling the index finger pulls the trigger.
+    const holding = seen.find((h) => !signOf(h));
+    aim = holding ? holding.palm : null;
+    if (holding) {
+      hand = { palm: holding.palm, angle: Math.atan2(holding.knuckle[1] - holding.wrist[1], holding.knuckle[0] - holding.wrist[0]) };
+      trigger = holding.straight < (arenaPlay.pulled ? 0.88 : 0.75);
+    } else {
+      trigger = false;
+    }
+  }
+
+  if (!paused) {
+    land.update(dt, walk && !shooter.over ? [ahead[0], ahead[2]] : null);
+    const eye = land.eyes();
+    const blaster = PVR.shooter.BLASTERS[shooter.blaster];
+    const pressed = trigger && !arenaPlay.pulled;
+    if (shooter.over) {
+      arenaPlay.overFor += dt;
+      if (pressed && arenaPlay.overFor > 1.5) restartArena();
+    } else if (aim && (pressed || (trigger && blaster.auto))) {
+      const shot = shooter.fire(eye, lookThrough(orientation, focal, width, height, aim));
+      if (shot) arenaPlay.flashes.push({ to: shot.to, life: 1 });
+    }
+    arenaPlay.pulled = trigger;
+    shooter.update(dt, eye);
+    for (const flash of arenaPlay.flashes) flash.life -= dt / 0.12;
+    arenaPlay.flashes = arenaPlay.flashes.filter((flash) => flash.life > 0);
+  }
+
+  blockScene.orientation = orientation;
+  blockScene.target = null;
+  blockScene.boxes = PVR.arenaBoxes(shooter, performance.now() / 1000, land.eyes());
+  return { handsOn, eye: land.eyes(), aim, hand, flashes: arenaPlay.flashes, best: arenaPlay.bestShown, sign };
 }
 const FIST_HOLD = 0.45;   // seconds a fist is held before it breaks a block
 const FIST_AGAIN = 0.7;   // seconds between breaks while it stays held
@@ -259,7 +361,7 @@ const menu = PVR.createMenu({
   recentre: () => tracking.recentre(),
   home: goHome,
   playAgain,
-  canPlayAgain: () => state.experience === 'follow-the-circle' && game.phase === 'done',
+  canPlayAgain: () => (state.experience === 'follow-the-circle' && game.phase === 'done') || (state.experience === 'blaster-arena' && arena().game.over),
 });
 
 // Goes from one activity straight to another without leaving VR.
@@ -300,16 +402,23 @@ function fitControls(level, now) {
   const label = menu.isOpen() ? 'SELECT' : (state.experience === 'pop-the-targets' ? 'POP' : '');
   // Real life or Simulation: which block world is in use, and whether the camera shows behind it.
   world = PVR.settings.real ? worlds.real : worlds.sim;
+  const inArenaGame = state.experience === 'blaster-arena' && !!blockScene;
   if (blockScene) {
-    blockScene.world = world;
+    blockScene.world = inArenaGame ? arena().land : world;
     blockScene.seeThrough = PVR.settings.real;
+    if (!inArenaGame) blockScene.boxes = [];
   }
   const inBlocks = state.experience === 'block-world' && !!blockScene && !menu.isOpen();
-  for (const key in blockButtons) blockButtons[key].hidden = !(buttons && inBlocks);
+  const inArena = inArenaGame && !menu.isOpen();
+  // The same three buttons serve both games: walk, and two actions.
+  for (const key in blockButtons) blockButtons[key].hidden = !(buttons && (inBlocks || inArena));
+  blockButtons.build.textContent = inArena ? 'FIRE' : 'BUILD';
+  blockButtons.dig.textContent = inArena ? 'NEXT' : 'BREAK';
+  if (!inArena) arenaPlay.trigger = false;
   hotbar.hidden = !inBlocks;
   hotbarSlots.forEach((slot, i) => slot.setAttribute('aria-pressed', i === world.kind));
-  if (!inBlocks) { blockPlay.walking = false; blockPlay.stride = 0; }
-  if (view) view.setScene(state.experience === 'block-world' ? blockScene : null);
+  if (!inBlocks && !inArena) { blockPlay.walking = false; blockPlay.stride = 0; }
+  if (view) view.setScene(state.experience === 'block-world' || inArenaGame ? blockScene : null);
   for (const button of sideButtons) {
     button.hidden = !(buttons && label);
     if (label) button.textContent = label;
@@ -334,7 +443,11 @@ if (view) {
     let seen = [];
     if (!buttons) {
       hands.update(now);
-      seen = hands.inView(now).map((hand) => Object.assign({}, hand, { tip: place(hand.tip[0], hand.tip[1]), palm: place(hand.palm[0], hand.palm[1]) }));
+      seen = hands.inView(now).map((hand) => {
+        const onCanvas = {};
+        for (const part of ['tip', 'palm', 'wrist', 'knuckle']) if (hand[part]) onCanvas[part] = place(hand[part][0], hand[part][1]);
+        return Object.assign({}, hand, onCanvas);
+      });
     }
     const fingertips = seen.map((hand) => hand.tip);
 
@@ -357,6 +470,8 @@ if (view) {
       PVR.paintTargets(ctx, width, height, focal, orientation, front, targets, buttons ? 1 : level, paused ? [] : fingertips);
     } else if (state.experience === 'block-world' && blockScene) {
       PVR.paintBlocks(ctx, width, height, world, playBlocks(dt, orientation, focal, width, height, seen, !buttons, paused));
+    } else if (state.experience === 'blaster-arena' && blockScene) {
+      PVR.paintArena(ctx, width, height, focal, orientation, arena().game, playArena(dt, orientation, focal, width, height, seen, !buttons, paused));
     } else if (state.experience === 'see-your-room') {
       PVR.paintMarkers(ctx, width, height, focal, orientation, front);
     }
@@ -604,7 +719,13 @@ for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']
   });
 }
 blockButtons.build.addEventListener('click', () => blockAct(true));
-blockButtons.dig.addEventListener('click', () => blockAct(false));
+blockButtons.dig.addEventListener('click', () => {
+  if (state.experience === 'blaster-arena') arena().game.nextBlaster(); else blockAct(false);
+});
+// In Blaster arena the upper button is FIRE: it fires when pressed, and a rapid blaster keeps firing while it is held.
+for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']) {
+  blockButtons.build.addEventListener(type, () => { arenaPlay.trigger = type === 'pointerdown' && state.experience === 'blaster-arena'; });
+}
 
 document.getElementById('open-menu').addEventListener('click', () => {
   if (!menu.isOpen()) menu.open(tracking.orientation()); else if (state.experience !== HOME) menu.close();
