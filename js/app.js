@@ -9,6 +9,7 @@ const screens = {
   vr: document.getElementById('vr'),
 };
 const HOME = 'home';      // the home menu, where you always start
+const HEADSET = 'headset-view';
 const SHOW_FOR = 4000;    // ms the buttons stay after a tap during a game
 const startButton = document.getElementById('start');
 const exitButton = document.getElementById('exit');
@@ -203,9 +204,11 @@ function worksAt(experience, level) {
 
 const menu = PVR.createMenu({
   tiles: () => Object.keys(PVR.experiences)
-    .filter((key) => !PVR.experiences[key].notInMenu && worksAt(PVR.experiences[key], PVR.settings.level))
+    .filter((key) => worksAt(PVR.experiences[key], PVR.settings.level))
     .sort((a, b) => (PVR.experiences[a].group === 'Games' ? 0 : 1) - (PVR.experiences[b].group === 'Games' ? 0 : 1))
-    .map((key) => ({ id: key, label: PVR.experiences[key].title, caption: PVR.experiences[key].group.toUpperCase() })),
+    .map((key) => ({ id: key, label: PVR.experiences[key].title, group: PVR.experiences[key].group }))
+    // The old two-picture view, kept for anyone with a lens holder. Off unless chosen.
+    .concat([{ id: HEADSET, label: 'Headset view: ' + (PVR.settings.lenses ? 'On' : 'Off'), caption: 'NEEDS LENSES', group: 'Testing', stay: true }]),
   choose: switchTo,
   recentre: () => tracking.recentre(),
   home: goHome,
@@ -215,6 +218,11 @@ const menu = PVR.createMenu({
 
 // Goes from one activity straight to another without leaving VR.
 function switchTo(key) {
+  if (key === HEADSET) {
+    PVR.settings.lenses = !PVR.settings.lenses;
+    PVR.saveSettings();
+    return;
+  }
   if (!PVR.experiences[key]) return;
   state.experience = key;
   playAgain();

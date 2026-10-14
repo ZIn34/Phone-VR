@@ -6,7 +6,7 @@ window.PVR = window.PVR || {};
 
 (function (PVR) {
   const percent = (value) => Math.round(value * 100) + '%';
-  // lenses: true = only shown with a lens holder, false = only shown without one.
+  // lenses: true = only shown in headset view (two pictures, for lenses), false = only shown in window mode.
   const ROWS = [
     { name: 'level', label: 'How you play', less: 'Lower level', more: 'Higher level', show: (value) => 'Level ' + value },
     { name: 'distance', label: 'Distance from face', less: 'Closer', more: 'Further', show: (value) => value + ' cm', lenses: false },
@@ -29,15 +29,12 @@ window.PVR = window.PVR || {};
     const values = {};
     const steppers = {};
     const toggle = panel.querySelector('#lens-toggle');
-    const holder = panel.querySelector('#holder-toggle');
 
     function refresh() {
       for (const row of ROWS) {
         values[row.name].textContent = row.show(settings[row.name]);
         steppers[row.name].hidden = !PVR.settingShown(row);
       }
-      holder.textContent = settings.lenses ? 'On' : 'Off';
-      holder.setAttribute('aria-pressed', settings.lenses);
       panel.querySelector('#lens-row').hidden = !settings.lenses;
       toggle.textContent = settings.distortion ? 'On' : 'Off';
       toggle.setAttribute('aria-pressed', settings.distortion);
@@ -93,11 +90,6 @@ window.PVR = window.PVR || {};
       if (row.name === 'strength') lensRow.after(line); else rows.insertBefore(line, lensRow);
     }
 
-    holder.addEventListener('click', () => {
-      settings.lenses = !settings.lenses;
-      PVR.saveSettings();
-      refresh();
-    });
     toggle.addEventListener('click', () => {
       settings.distortion = !settings.distortion;
       PVR.saveSettings();

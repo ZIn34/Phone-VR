@@ -23,11 +23,12 @@ window.PVR = window.PVR || {};
   const UNPINCH = 0.32;      // ...and this far apart lets go
   const PALM = 0.8;          // seconds an open palm is shown to open the menu
   const TILE_W = 12 * RAD;
-  const TILE_H = 6.5 * RAD;
-  const GAP = 1.5 * RAD;
+  const TILE_H = 5.4 * RAD;
+  const GAP = 1.2 * RAD;
   const LINE = 4.6 * RAD;    // height of one settings line
   const FOCAL_FOR_SIZES = 2.79;
-  const DROP = 4 * RAD;
+  const DROP = 0.5 * RAD;
+  const HEADING = 2.2 * RAD;   // height of a section heading
 
   function text(ctx, words, x, y, size, colour) {
     ctx.font = `bold ${Math.round(size)}px sans-serif`;
@@ -54,7 +55,8 @@ window.PVR = window.PVR || {};
   }
 
   // actions: {
-  //   tiles(): [{ id, label, caption }]   the activities that work at the current level
+  //   tiles(): [{ id, label, caption, group, stay }]   what can be chosen at the current level, with
+  //       the section it sits in; stay: choosing it leaves the menu open
   //   choose(id), recentre(), home(), canPlayAgain(), playAgain()
   // }
   PVR.createMenu = function (actions) {
@@ -96,10 +98,17 @@ window.PVR = window.PVR || {};
       const list = [];
       const tile = (id, label, caption, x, y, w, h, run, repeat) => list.push({ id, label, caption, x, y, w, h, run, repeat, line: h === LINE });
       if (screen === 'main') {
+        // Each section has its heading, then its tiles three to a row.
         const rows = [];
         const activities = actions.tiles();
-        for (let i = 0; i < activities.length; i += 3) {
-          rows.push(activities.slice(i, i + 3).map((a) => [a.id, a.label, a.caption, () => { actions.choose(a.id); show('closed'); }]));
+        const sections = [];
+        for (const a of activities) if (!sections.includes(a.group)) sections.push(a.group);
+        for (const section of sections) {
+          rows.push({ heading: section });
+          const inSection = activities.filter((a) => a.group === section);
+          for (let i = 0; i < inSection.length; i += 3) {
+            rows.push({ tiles: inSection.slice(i, i + 3).map((a) => [a.id, a.label, a.caption || '', () => { actions.choose(a.id); if (!a.stay) show('closed'); }]) });
+          }
         }
         const row = [
           ['fit', 'Settings', '', () => show('fit')],
@@ -110,17 +119,21 @@ window.PVR = window.PVR || {};
           row.push(['home', 'Home', 'BACK TO THIS MENU', () => actions.home()]);
           const last = [['close', 'Close menu', '', () => show('closed')]];
           if (actions.canPlayAgain()) last.unshift(['again', 'Play again', '', () => { actions.playAgain(); show('closed'); }]);
-          rows.push(row, last);
+          rows.push({ gap: true }, { tiles: row }, { tiles: last });
         } else {
-          rows.push(row);
+          rows.push({ gap: true }, { tiles: row });
         }
-        const step = TILE_H + GAP;
-        rows.forEach((row, r) => {
-          const y = ((rows.length - 1) / 2 - r) * step;
-          row.forEach(([id, label, caption, run], c) => {
-            tile(id, label, caption, (c - (row.length - 1) / 2) * (TILE_W + GAP), y, TILE_W, TILE_H, run);
+        const tall = (r) => (r.tiles ? TILE_H + GAP : (r.heading ? HEADING : GAP));
+        let y = rows.reduce((sum, r) => sum + tall(r), 0) / 2;
+        for (const r of rows) {
+          const middle = y - tall(r) / 2;
+          y -= tall(r);
+          if (r.heading) list.push({ words: r.heading.toUpperCase(), x: 0, y: middle - 0.3 * RAD, size: 17, colour: '#9aa3b5' });
+          if (!r.tiles) continue;
+          r.tiles.forEach(([id, label, caption, run], c) => {
+            tile(id, label, caption, (c - (r.tiles.length - 1) / 2) * (TILE_W + GAP), middle, TILE_W, TILE_H, run);
           });
-        });
+        }
         return list;
       }
       // Settings: one line each, - on the left and + on the right.
@@ -130,7 +143,6 @@ window.PVR = window.PVR || {};
         if (row.name === 'strength') lines.push({ toggle: 'distortion', label: 'Lens correction' });
         lines.push({ row });
       }
-      lines.push({ toggle: 'lenses', label: 'Lens holder (two pictures)' });
       lines.push({ back: true });
       const step = LINE + 0.7 * RAD;
       lines.forEach((line, i) => {
@@ -251,7 +263,7 @@ window.PVR = window.PVR || {};
         const tiles = layout();
         for (const t of tiles) {
           t.x *= fit;
-          t.y = (t.y - DROP) * fit; // the whole menu sits a little below eye level
+          t.y = (t.y - DROP) * fit; // the whole menu sits a touch below eye level
           if (t.w) { t.w *= fit; t.h *= fit; }
           if (t.words) {
             t.at = spot(anchorYaw + t.x, anchorPitch + t.y);
@@ -280,7 +292,7 @@ window.PVR = window.PVR || {};
         ctx.fillRect(0, 0, width, height);
         for (const t of tiles) {
           if (t.words) {
-            if (t.at) text(ctx, t.words, t.at[0], t.at[1], 19);
+            if (t.at) text(ctx, t.words, t.at[0], t.at[1], t.size || 19, t.colour);
             continue;
           }
           if (!t.corners) continue;
@@ -333,7 +345,7 @@ window.PVR = window.PVR || {};
           ctx.lineWidth = 3;
           ctx.stroke();
         }
-        text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.12, 19, '#3dffb0');
+        text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.055, 18, '#3dffb0');
 
         // Press last, so a tile that changes the screen does not disturb this frame's drawing.
         for (const t of pressed) t.run();

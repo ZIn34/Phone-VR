@@ -11,7 +11,9 @@ Link: https://zin34.github.io/Phone-VR/ (the capitals matter).
 
 1. Open the link in Safari. Pick **Level 1** under How you play.
 2. Tap **Start**. Allow **motion**, then the **camera**.
-3. Turn the phone sideways and hold it up to your eyes.
+3. Turn the phone sideways and hold it up in front of you at a normal
+   distance. No lenses are needed. (Upright does not work: it asks you to
+   turn the phone sideways.)
 
 Works if: you see one big picture of your room from the back camera, with the
 home menu's tiles floating in it.
@@ -58,8 +60,9 @@ and are the buttons where your thumbs want them.
    back. The same green post should still be on it. If not, tap **Re-centre**.
 4. Tap the screen, or **Settings**, and change **Distance from face** until a
    doorway on the phone is about the same size as the real one around it.
-5. Only if you use a holder with lenses: turn on **Lens holder** for two
-   pictures, then adjust Eye distance, Picture size and Lens correction.
+5. Only if you ever get a holder with lenses: in the menu's Testing section
+   choose **Headset view** for two pictures. Settings then also shows Eye
+   distance, Picture size and Lens correction.
 
 Please tell me: the distance you ended up with, and whether the green posts
 stay glued to real objects as you turn.

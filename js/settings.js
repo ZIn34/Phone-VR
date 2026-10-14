@@ -1,7 +1,7 @@
 'use strict';
 
-// Settings: how you play, how far the phone is from your face, and (for a
-// lens holder) where and how big the two eye pictures are drawn.
+// Settings: how you play and how far the phone is from your face. In headset
+// view (two pictures, for lenses) also where and how big the eye pictures are.
 // They are kept on this phone so they are still there next time.
 window.PVR = window.PVR || {};
 
@@ -11,7 +11,7 @@ window.PVR = window.PVR || {};
   PVR.defaultSettings = {
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
     distance: 25,       // how far the phone is held from your face, in centimetres
-    lenses: false,      // false: one big picture. true: two eye pictures, for a holder with lenses
+    lenses: false,      // false: window mode, one full-screen picture. true: headset view, two eye pictures for lenses
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
     size: 1,            // 1 = the picture is as tall as the screen
     offsetY: 0,         // up (+) or down (-), as a share of the screen height
@@ -63,7 +63,7 @@ window.PVR = window.PVR || {};
   };
 
   // Puts the numbers back to their starting values. How you play, and whether
-  // you use a lens holder, are left alone.
+  // headset view is on, are left alone.
   PVR.resetSettings = function () {
     Object.assign(PVR.settings, PVR.defaultSettings, { level: PVR.settings.level, lenses: PVR.settings.lenses });
     PVR.saveSettings();
