@@ -168,23 +168,49 @@ window.PVR = window.PVR || {};
         const world = scene.world;
         if (!piecesOf.has(world)) piecesOf.set(world, {});
         const pieces = piecesOf.get(world);
-        // Redraw the pieces that changed. Each is small, so building stays quick however big the world is.
-        for (const key of world.dirty) {
-          const [cx, cz] = key.split(',').map(Number);
+        const size = world.chunk;
+        const eyes = world.eyes();
+        // How far the nearest part of a piece is from the player.
+        const farOff = (cx, cz) => Math.hypot(Math.max(cx * size - eyes[0], 0, eyes[0] - (cx + 1) * size), Math.max(cz * size - eyes[2], 0, eyes[2] - (cz + 1) * size));
+        const draw = (key, cx, cz) => {
           const mesh = buildMesh(world, cx, cz);
           const piece = pieces[key] || (pieces[key] = { buffer: gl.createBuffer(), vertices: 0, cx, cz });
           gl.bindBuffer(gl.ARRAY_BUFFER, piece.buffer);
           gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.DYNAMIC_DRAW);
           piece.vertices = mesh.length / 8;
-        }
+        };
+        // Redraw the pieces that changed. Each is small, so building stays quick however big the world is.
+        for (const key of world.dirty) if (pieces[key]) draw(key, pieces[key].cx, pieces[key].cz);
         world.dirty.clear();
+        // Draw the pieces that have come into sight, nearest first. Only a few
+        // a frame, so walking into new land does not stutter; all at once when
+        // nothing is drawn yet.
+        const ecx = Math.floor(eyes[0] / size), ecz = Math.floor(eyes[2] / size);
+        const around = Math.ceil(SEE / size) + 1;
+        const wanted = [];
+        for (let cx = ecx - around; cx <= ecx + around; cx++) {
+          for (let cz = ecz - around; cz <= ecz + around; cz++) {
+            if (pieces[cx + ',' + cz] || !world.hasPiece(cx, cz)) continue;
+            const far = farOff(cx, cz);
+            if (far <= SEE) wanted.push({ cx, cz, far });
+          }
+        }
+        wanted.sort((one, two) => one.far - two.far);
+        const most = Object.keys(pieces).length ? 2 : wanted.length;
+        for (const want of wanted.slice(0, most)) draw(want.cx + ',' + want.cz, want.cx, want.cz);
+        // Let go of pieces left well behind.
+        for (const key in pieces) {
+          if (farOff(pieces[key].cx, pieces[key].cz) > SEE + size * 2) {
+            gl.deleteBuffer(pieces[key].buffer);
+            delete pieces[key];
+          }
+        }
 
         // Where the eye is, and the matrix that turns places in the world into places in the picture.
         const q = scene.orientation;
         const right = math.rotate(q, [1, 0, 0]);
         const up = math.rotate(q, [0, 1, 0]);
         const back = math.rotate(q, [0, 0, 1]);
-        const eyes = world.eyes();
         const from = [0, 1, 2].map((i) => eyes[i] + right[i] * eye * EYES_APART / 2);
         const dot = (a) => -(a[0] * from[0] + a[1] * from[1] + a[2] * from[2]);
         const px = focal / halfWidth;
@@ -209,14 +235,9 @@ window.PVR = window.PVR || {};
         gl.enableVertexAttribArray(at.place);
         gl.enableVertexAttribArray(at.uv);
         gl.enableVertexAttribArray(at.colour);
-        const size = world.chunk;
         for (const key in pieces) {
           const piece = pieces[key];
-          if (!piece.vertices) continue;
-          // How far the nearest part of this piece is from the player.
-          const dx = Math.max(piece.cx * size - eyes[0], 0, eyes[0] - (piece.cx + 1) * size);
-          const dz = Math.max(piece.cz * size - eyes[2], 0, eyes[2] - (piece.cz + 1) * size);
-          if (Math.hypot(dx, dz) > SEE) continue;
+          if (!piece.vertices || farOff(piece.cx, piece.cz) > SEE) continue;
           gl.bindBuffer(gl.ARRAY_BUFFER, piece.buffer);
           gl.vertexAttribPointer(at.place, 3, gl.FLOAT, false, 32, 0);
           gl.vertexAttribPointer(at.uv, 2, gl.FLOAT, false, 32, 12);

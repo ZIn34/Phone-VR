@@ -139,12 +139,93 @@ test('a wall two blocks high stops you; a step one block high is climbed', () =>
   assert.ok(Math.abs(p.y - y) < 1e-6, 'still on the ground');
 });
 
-test('you cannot walk off the edge of the world', () => {
+test('Block world has no edge: walking one way for a long time keeps finding new land', () => {
   const world = createWorld(6);
+  world.setFlying(true); // up above the hills and trees, so they do not stop the walk
+  for (let i = 0; i < 60 * 5; i++) world.update(STEP, [0, 1, 0]);
+  for (let i = 0; i < 60 * 120; i++) world.update(STEP, [1, 0, 0]);
+  assert.ok(world.player.x > SIZE + 500, `only got to x ${world.player.x.toFixed(0)}`);
+  const x = Math.floor(world.player.x), z = Math.floor(world.player.z);
+  assert.ok(world.top(x + 20, z) >= 1, 'ground further ahead');
+  for (let i = 0; i < 60 * 60; i++) world.update(STEP, [0, 0, -1]);
+  assert.ok(world.player.z < -150, 'and north, below zero');
+  assert.ok(world.top(Math.floor(world.player.x), Math.floor(world.player.z)) >= 1);
+});
+
+test('an arena still has an edge', () => {
+  const world = createWorld(6, false, true);
   for (let i = 0; i < 60 * 30; i++) world.update(STEP, [1, 0]);
   assert.ok(world.player.x <= SIZE - rules.edge + 1e-9);
   for (let i = 0; i < 60 * 30; i++) world.update(STEP, [0, -1]);
   assert.ok(world.player.z >= rules.edge - 1e-9);
+});
+
+test('the first land is exactly as it was before the world had no edge', () => {
+  const old = require('./old-blocks.js');
+  for (const seed of [20261013, 3]) {
+    const before = old.createWorld(seed), now = createWorld(seed);
+    for (let x = 0; x < SIZE; x++) for (let z = 0; z < SIZE; z++) for (let y = 0; y < old.HEIGHT; y++) {
+      if (before.get(x, y, z) !== now.get(x, y, z)) assert.fail(`seed ${seed}: differs at ${x},${y},${z}`);
+    }
+    assert.deepStrictEqual(now.start, before.start);
+  }
+});
+
+test('a save from before the world had no edge loads, with builds in the same places', () => {
+  const old = require('./old-blocks.js');
+  const before = old.createWorld(20261013);
+  before.unlimited = true;
+  const p = before.player;
+  const spot = [Math.floor(p.x) + 2, Math.floor(p.y) + 3, Math.floor(p.z)];
+  before.build({ before: spot });
+  const dug = [5, before.top(5, 90), 90];
+  before.dig({ block: dug });
+  const now = createWorld(20261013);
+  assert.strictEqual(now.load(before.save()), true);
+  assert.strictEqual(now.get(...spot), kinds.PLANKS);
+  assert.strictEqual(now.get(...dug), kinds.AIR);
+});
+
+test('far from the start, the land has hills and plains and trees, and does not repeat', () => {
+  const world = createWorld(20261013);
+  const tops = [];
+  let trees = 0;
+  for (let x = 400; x < 700; x++) {
+    for (let z = -300; z < 0; z += 3) {
+      const top = world.top(x, z);
+      assert.ok(top >= 1 && top < HEIGHT, `ground at ${x},${z}`);
+      if (world.get(x, top, z) === kinds.LEAVES) trees++;
+      if (z === -150) tops.push(top);
+    }
+  }
+  assert.ok(Math.max(...tops) - Math.min(...tops) >= 6, `heights only ${Math.min(...tops)} to ${Math.max(...tops)}`);
+  assert.ok(trees > 200, `only ${trees} tree tops`);
+  // Two stretches of land a long way apart are not the same.
+  let same = 0;
+  for (let i = 0; i < 200; i++) if (world.top(1000 + i, 50) === world.top(5000 + i, 50)) same++;
+  assert.ok(same < 120, `${same} of 200 the same`);
+});
+
+test('what you build far away is still there after walking away and back, and after saving', () => {
+  const world = createWorld(4);
+  world.unlimited = true;
+  const spot = [-300, world.top(-300, 700) + 1, 700];
+  world.build({ before: spot });
+  assert.strictEqual(world.get(...spot), kinds.PLANKS);
+  world.setFlying(true);
+  for (let i = 0; i < 60 * 5; i++) world.update(STEP, [0, 1, 0]);
+  for (let i = 0; i < 60 * 10; i++) world.update(STEP, [1, 0, 0]); // far enough that the land there is forgotten
+  assert.strictEqual(world.get(...spot), kinds.PLANKS, 'made again with the build in it');
+  const again = createWorld(4);
+  assert.strictEqual(again.load(world.save()), true);
+  assert.strictEqual(again.get(...spot), kinds.PLANKS);
+});
+
+test('the Real life world has a floor everywhere and no edge', () => {
+  const world = createWorld(5, true);
+  for (const [x, z] of [[48, 48], [-500, 20], [3000, -3000]]) assert.strictEqual(world.get(x, 0, z), kinds.FLOOR);
+  for (let i = 0; i < 60 * 30; i++) world.update(STEP, [-1, 0]);
+  assert.ok(world.player.x < -50);
 });
 
 test('what you built, where you are and the block in hand come back after saving', () => {

@@ -95,7 +95,7 @@
       const far = rules.near + random() * (rules.far - rules.near);
       const x = p.x + Math.sin(angle) * far;
       const z = p.z + Math.cos(angle) * far;
-      if (x < 2 || z < 2 || x > world.size - 2 || z > world.size - 2) return;
+      if (world.bounded && (x < 2 || z < 2 || x > world.size - 2 || z > world.size - 2)) return;
       life.add(kind, x, z);
     }
 
@@ -187,7 +187,7 @@
           const x = c.x + Math.sin(c.heading) * kind.speed * dt;
           const z = c.z - Math.cos(c.heading) * kind.speed * dt;
           const y = standOn(x, z);
-          const inWorld = x > 1.5 && z > 1.5 && x < world.size - 1.5 && z < world.size - 1.5;
+          const inWorld = !world.bounded || (x > 1.5 && z > 1.5 && x < world.size - 1.5 && z < world.size - 1.5);
           // They climb one block and step down a few, but will not climb walls or walk off cliffs.
           if (inWorld && y - c.y <= 1 && c.y - y <= 3) {
             c.x = x; c.z = z; c.y = y;

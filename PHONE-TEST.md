@@ -58,6 +58,9 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
    **BREAK**. Levels 2 and 3: point at a block and **pinch** to build (keep
    your other fingers open); hold a **fist** over a block to break it.
 6. Leave and come back: what you built should still be there.
+6b. The world has no edge. Keep walking (or fly) one way: new hills and trees
+   keep appearing. Build something far out, leave, come back, and walk there
+   again: it should still be there.
 7. Jump and fly. Level 1: tap **JUMP**; double tap it (or double tap the
    picture) to fly, then hold WALK and look where you want to go; double tap
    again to land. Levels 2 and 3: little finger up to jump; index and little

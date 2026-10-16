@@ -3,15 +3,18 @@
 // Block world: the rules of the world, with no drawing in it, so it is also
 // run by tests/blocks.test.js.
 //
-// The world is a box of cubes, SIZE wide and deep and HEIGHT tall. A flat
-// world has no land of its own: just a floor you cannot see, to build on. x is east,
-// y is up, z is south. Each cube is one unit across. The player's place is
-// where their feet are.
+// The world goes on for ever in every direction, HEIGHT tall. It is kept in
+// square pieces CHUNK wide, each made the first time something looks at it, so
+// only the land near you is ever made. The first SIZE by SIZE of land is the
+// same as before the world had no edge, so builds from then still sit right.
+// An arena is the one world with an edge: SIZE wide. A flat world has no land
+// of its own: just a floor you cannot see, to build on. x is east, y is up, z is
+// south. Each cube is one unit across. The player's place is where their feet are.
 (function (root) {
   const inNode = typeof module !== 'undefined' && module.exports;
 
-  const SIZE = 96;
-  const HEIGHT = 16;
+  const SIZE = 96;     // the first land, and the size of an arena
+  const HEIGHT = 24;
   const CHUNK = 16;   // the world is drawn in square pieces this wide, so one changed block does not mean redrawing everything
   const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, PLANKS = 6, BRICK = 7, FLOOR = 8, GLASS = 9, LAMP = 10;
   const NAMES = ['Air', 'Grass', 'Dirt', 'Stone', 'Wood', 'Leaves', 'Planks', 'Brick', 'Floor', 'Glass', 'Lamp'];
@@ -36,7 +39,8 @@
     jump: 7.6,       // how fast a jump leaves the ground: enough to clear one block
     hop: 7.3,        // the smaller jump that carries you up a step you walk into
     fly: 5,          // blocks a second while flying
-    edge: 1.5,       // how close to the edge of the world you can walk
+    edge: 1.5,       // how close to the edge of an arena you can walk
+    keep: 6,         // pieces of land further than this many pieces away are forgotten, and made again if you come back
   };
 
   function randomFrom(seed) {
@@ -50,14 +54,34 @@
     };
   }
 
+  // A smooth bumpy surface: a number from 0 to 1 that changes slowly with x and z.
+  function noiseFrom(seed) {
+    const corner = (ix, iz, layer) => {
+      let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(seed + layer * 1013, 1274126177);
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    };
+    return function (x, z, layer) {
+      const ix = Math.floor(x), iz = Math.floor(z);
+      let fx = x - ix, fz = z - iz;
+      fx = fx * fx * (3 - 2 * fx);
+      fz = fz * fz * (3 - 2 * fz);
+      const a = corner(ix, iz, layer), b = corner(ix + 1, iz, layer), c = corner(ix, iz + 1, layer), d = corner(ix + 1, iz + 1, layer);
+      return a + (b - a) * fx + (c - a) * fz + (a - b - c + d) * fx * fz;
+    };
+  }
+
   // flat: no land, just a floor you cannot see. arena: a level floor with walls
   // to hide behind, for Blaster arena (flat as well: the floor cannot be seen).
   function createWorld(seed, flat, arena) {
-    const cells = new Uint8Array(SIZE * SIZE * HEIGHT);
-    const edits = {}; // every block the player has changed: place in the list -> kind
+    const bounded = !!arena;
+    const pieces = new Map();   // "cx,cz" -> the blocks of that piece of land
+    const edits = {};           // every block the player has changed: "x,y,z" -> kind
+    const editsIn = new Map();  // "cx,cz" -> the edits in that piece, to put back when it is made again
     const world = {
       seed,
       size: SIZE,
+      bounded,
       height: HEIGHT,
       player: { x: SIZE / 2 + 0.5, y: HEIGHT, z: SIZE / 2 + 0.5, fall: 0 },
       kind: 0,       // which of BUILD_WITH is in hand
@@ -78,49 +102,112 @@
         : { eye: rules.eye, tall: rules.tall, reach: rules.reach, speed: rules.speed, stride: 0.8 },
       dirty: new Set(), // the pieces of the world whose drawing is out of date: "cx,cz"
     };
-    const markAll = () => { for (let cx = 0; cx < SIZE / CHUNK; cx++) for (let cz = 0; cz < SIZE / CHUNK; cz++) world.dirty.add(cx + ',' + cz); };
-    const at = (x, y, z) => (y * SIZE + z) * SIZE + x;
-    const inside = (x, y, z) => x >= 0 && x < SIZE && z >= 0 && z < SIZE && y >= 0 && y < HEIGHT;
+    const FIRST = SIZE / CHUNK; // the first land is this many pieces across
+    const firstLand = (cx, cz) => cx >= 0 && cz >= 0 && cx < FIRST && cz < FIRST;
+    const markAll = () => { for (const key of pieces.keys()) world.dirty.add(key); };
+    const pieceKey = (cx, cz) => cx + ',' + cz;
+    // Where a block is within its piece. (x & 15 is x's place in a piece 16 wide, below zero too.)
+    const at = (x, y, z) => (y * CHUNK + (z & (CHUNK - 1))) * CHUNK + (x & (CHUNK - 1));
+    const outside = (x, z) => bounded && (x < 0 || z < 0 || x >= SIZE || z >= SIZE);
+    const inside = (x, y, z) => y >= 0 && y < HEIGHT && !outside(x, z);
+    // Whether a piece of land exists to be drawn.
+    world.hasPiece = (cx, cz) => !bounded || firstLand(cx, cz);
+
+    // The blocks of the piece of land that holds x, z, made if it is not yet.
+    let lastCx = NaN, lastCz = NaN, lastPiece = null; // the last piece looked at, as most looks are at the same one
+    function pieceAt(x, z) {
+      const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+      if (cx === lastCx && cz === lastCz) return lastPiece;
+      const key = pieceKey(cx, cz);
+      const piece = pieces.get(key) || makePiece(cx, cz, key);
+      lastCx = cx; lastCz = cz;
+      lastPiece = piece;
+      return piece;
+    }
 
     world.get = function (x, y, z) {
       if (y < 0) return STONE;                 // solid all the way down
+      x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
       if (!inside(x, y, z)) return AIR;
-      return cells[at(x, y, z)];
+      return pieceAt(x, z)[at(x, y, z)];
     };
     world.solid = (x, y, z) => world.get(x, y, z) !== AIR;
+    const put = (x, y, z, kind) => { pieceAt(x, z)[at(x, y, z)] = kind; };
 
-    function generate() {
-      if (flat || arena) {
-        for (let x = 0; x < SIZE; x++) for (let z = 0; z < SIZE; z++) cells[at(x, 0, z)] = flat ? FLOOR : STONE;
-        if (arena) buildArena();
-        return;
+    // The shape of the land. The first land is gentle rolling ground, as it always
+    // was; further out it grows into plains and hills that never repeat.
+    const random = randomFrom(seed);
+    const a = random() * 6.28, b = random() * 6.28, c = random() * 6.28;
+    const noise = noiseFrom(seed);
+    function ground(x, z) {
+      let h = 4.5 + 1.6 * Math.sin(x * 0.21 + a) + 1.4 * Math.sin(z * 0.17 + b) + 0.9 * Math.sin((x + z) * 0.33 + c);
+      const out = Math.max(-x, x - (SIZE - 1), -z, z - (SIZE - 1), 0); // how far beyond the first land
+      if (out > 0) {
+        const blend = Math.min(1, out / 24);
+        const hilly = noise(x / 90, z / 90, 1);           // some places are plains, some hills
+        const hills = (noise(x / 30, z / 30, 2) - 0.5) * (4 + 16 * hilly) + (noise(x / 9, z / 9, 3) - 0.5) * 2.5;
+        h += blend * blend * (3 - 2 * blend) * hills;
       }
-      const random = randomFrom(seed);
-      const a = random() * 6.28, b = random() * 6.28, c = random() * 6.28;
-      const ground = (x, z) => Math.round(4.5 + 1.6 * Math.sin(x * 0.21 + a) + 1.4 * Math.sin(z * 0.17 + b) + 0.9 * Math.sin((x + z) * 0.33 + c));
-      for (let x = 0; x < SIZE; x++) {
-        for (let z = 0; z < SIZE; z++) {
-          const top = Math.max(1, Math.min(HEIGHT - 8, ground(x, z)));
+      return Math.max(1, Math.min(HEIGHT - 8, Math.round(h)));
+    }
+
+    function makePiece(cx, cz, key) {
+      const cells = new Uint8Array(CHUNK * CHUNK * HEIGHT);
+      pieces.set(key, cells);
+      for (let x = cx * CHUNK; x < (cx + 1) * CHUNK; x++) {
+        for (let z = cz * CHUNK; z < (cz + 1) * CHUNK; z++) {
+          if (flat || arena) { cells[at(x, 0, z)] = flat ? FLOOR : STONE; continue; }
+          const top = ground(x, z);
           for (let y = 0; y <= top; y++) cells[at(x, y, z)] = y === top ? GRASS : (y >= top - 2 ? DIRT : STONE);
         }
       }
-      // A few trees, kept away from the middle where the player starts.
+      lastCx = cx; lastCz = cz;
+      lastPiece = cells;
+      if (!flat && !arena && !firstLand(cx, cz)) plantTrees(cx, cz);
+      for (const place of editsIn.get(key) || []) {
+        const [x, y, z] = place.split(',').map(Number);
+        cells[at(x, y, z)] = edits[place];
+      }
+      return cells;
+    }
+
+    function tree(x, z, trunk) {
+      const base = world.top(x, z);
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          for (let dy = 0; dy <= 2; dy++) {
+            const far = Math.abs(dx) + Math.abs(dz) + dy * 1.5;
+            const y = base + trunk + dy;
+            if (far <= 3.5 && inside(x + dx, y, z + dz)) put(x + dx, y, z + dz, LEAVES);
+          }
+        }
+      }
+      for (let dy = 1; dy <= trunk; dy++) if (inside(x, base + dy, z)) put(x, base + dy, z, WOOD);
+    }
+
+    // Trees beyond the first land: each piece has its own, always the same,
+    // kept away from its sides so a tree never reaches into the next piece.
+    // Some places are woods, some are open.
+    function plantTrees(cx, cz) {
+      const random = randomFrom(Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663) ^ seed);
+      const count = Math.floor(random() * (0.5 + 4 * noise(cx / 5, cz / 5, 4)));
+      for (let n = 0; n < count; n++) {
+        const x = cx * CHUNK + 2 + Math.floor(random() * (CHUNK - 4));
+        const z = cz * CHUNK + 2 + Math.floor(random() * (CHUNK - 4));
+        tree(x, z, 3 + Math.floor(random() * 2));
+      }
+    }
+
+    function generate() {
+      if (flat) return; // made as you go
+      for (let cx = 0; cx < FIRST; cx++) for (let cz = 0; cz < FIRST; cz++) pieceAt(cx * CHUNK, cz * CHUNK);
+      if (arena) { buildArena(); return; }
+      // The first land's trees, made just as they always were, kept away from the middle where the player starts.
       for (let n = 0; n < Math.round(SIZE * SIZE / 200); n++) {
         const x = 3 + Math.floor(random() * (SIZE - 6));
         const z = 3 + Math.floor(random() * (SIZE - 6));
         if (Math.abs(x - SIZE / 2) < 3 && Math.abs(z - SIZE / 2) < 3) continue;
-        const base = world.top(x, z);
-        const trunk = 3 + Math.floor(random() * 2);
-        for (let dx = -2; dx <= 2; dx++) {
-          for (let dz = -2; dz <= 2; dz++) {
-            for (let dy = 0; dy <= 2; dy++) {
-              const far = Math.abs(dx) + Math.abs(dz) + dy * 1.5;
-              const y = base + trunk + dy;
-              if (far <= 3.5 && inside(x + dx, y, z + dz)) cells[at(x + dx, y, z + dz)] = LEAVES;
-            }
-          }
-        }
-        for (let dy = 1; dy <= trunk; dy++) if (inside(x, base + dy, z)) cells[at(x, base + dy, z)] = WOOD;
+        tree(x, z, 3 + Math.floor(random() * 2));
       }
     }
 
@@ -137,7 +224,7 @@
         const z = Math.round(mid - Math.cos(angle) * far);
         // Run the wall across the line of sight from the middle.
         const alongX = Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle));
-        for (let i = -1; i <= 1; i++) for (let y = 1; y <= 2; y++) cells[at(alongX ? x + i : x, y, alongX ? z : z + i)] = n % 2 ? BRICK : PLANKS;
+        for (let i = -1; i <= 1; i++) for (let y = 1; y <= 2; y++) put(alongX ? x + i : x, y, alongX ? z : z + i, n % 2 ? BRICK : PLANKS);
         const awayX = Math.sign(Math.round(Math.sin(angle) * 10)) || 1;
         const awayZ = Math.sign(Math.round(-Math.cos(angle) * 10)) || 1;
         const behind = alongX ? [x + 0.5, 1, z + awayZ + 0.5] : [x + awayX + 0.5, 1, z + 0.5];
@@ -154,15 +241,39 @@
       return -1;
     };
 
+    // Keeps a change, so it is saved and put back if its piece is forgotten and made again.
+    function remember(x, y, z, kind) {
+      const place = x + ',' + y + ',' + z;
+      const key = pieceKey(Math.floor(x / CHUNK), Math.floor(z / CHUNK));
+      if (!(place in edits)) {
+        if (!editsIn.has(key)) editsIn.set(key, []);
+        editsIn.get(key).push(place);
+      }
+      edits[place] = kind;
+    }
+
     function set(x, y, z, kind) {
-      cells[at(x, y, z)] = kind;
-      edits[at(x, y, z)] = kind;
+      put(x, y, z, kind);
+      remember(x, y, z, kind);
       world.changed++;
       // A block on the edge of a piece also changes how its neighbour looks.
       for (const dx of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
-        if (inside(x + dx, y, z + dz)) world.dirty.add(Math.floor((x + dx) / CHUNK) + ',' + Math.floor((z + dz) / CHUNK));
+        if (inside(x + dx, y, z + dz)) world.dirty.add(pieceKey(Math.floor((x + dx) / CHUNK), Math.floor((z + dz) / CHUNK)));
       }
     }
+
+    // Lets go of land far behind you, so walking a long way does not fill the
+    // phone's memory. It is made again, with your changes, if you come back.
+    function forgetFarLand() {
+      const pcx = Math.floor(world.player.x / CHUNK), pcz = Math.floor(world.player.z / CHUNK);
+      for (const key of pieces.keys()) {
+        const [cx, cz] = key.split(',').map(Number);
+        if (firstLand(cx, cz) && !flat) continue; // its trees were made with the whole first land at once
+        if (Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) > rules.keep) pieces.delete(key);
+      }
+      lastCx = NaN;
+    }
+    let forgetIn = 0;
 
     // Whether the player's body would be inside a block if their feet were here.
     function blocked(x, y, z) {
@@ -210,9 +321,9 @@
       const [x, y, z] = target.before;
       if (!inside(x, y, z) || world.solid(x, y, z)) return false;
       if (!world.unlimited && world.have[BUILD_WITH[world.kind]] <= 0) return false; // none left
-      cells[at(x, y, z)] = BUILD_WITH[world.kind];
+      put(x, y, z, BUILD_WITH[world.kind]);
       const inTheWay = blocked(world.player.x, world.player.y, world.player.z);
-      cells[at(x, y, z)] = AIR;
+      put(x, y, z, AIR);
       if (inTheWay) return false; // not where you are standing
       set(x, y, z, BUILD_WITH[world.kind]);
       if (!world.unlimited) world.have[BUILD_WITH[world.kind]]--;
@@ -271,6 +382,8 @@
     world.update = function (dt, walk) {
       const p = world.player;
       world.landed = 0;
+      forgetIn -= dt;
+      if (forgetIn <= 0) { forgetIn = 2; forgetFarLand(); }
       const way = walk ? (walk.length === 2 ? [walk[0], 0, walk[1]] : walk) : null;
       if (way) {
         const length = (world.flying ? Math.hypot(way[0], way[1], way[2]) : Math.hypot(way[0], way[2])) || 1;
@@ -279,8 +392,10 @@
         const dz = way[2] / length * speed * dt;
         const low = rules.edge, high = SIZE - rules.edge;
         const go = (x, z) => {
-          x = Math.max(low, Math.min(high, x));
-          z = Math.max(low, Math.min(high, z));
+          if (bounded) {
+            x = Math.max(low, Math.min(high, x));
+            z = Math.max(low, Math.min(high, z));
+          }
           if (!blocked(x, p.y, z)) { p.x = x; p.z = z; return true; }
           // A step one block high with room above it: hop up it, rather than being put on top.
           if (!world.flying && onGround() && !blocked(x, p.y + 1.001, z) && !blocked(p.x, p.y + 1.001, p.z)) p.fall = rules.hop;
@@ -328,11 +443,14 @@
       try { saved = JSON.parse(text); } catch (err) { saved = null; }
       if (!saved || saved.seed !== seed || typeof saved.edits !== 'object') return false;
       for (const key in saved.edits) {
-        const index = Number(key);
+        let place = key.split(',').map(Number);
+        // Saved before the world had no edge: a number counting through the first land.
+        if (place.length === 1) place = [place[0] % SIZE, Math.floor(place[0] / (SIZE * SIZE)), Math.floor(place[0] / SIZE) % SIZE];
+        const [x, y, z] = place;
         const kind = saved.edits[key];
-        if (Number.isInteger(index) && index >= 0 && index < cells.length && kind >= 0 && kind < NAMES.length) {
-          cells[index] = kind;
-          edits[index] = kind;
+        if (place.length === 3 && place.every(Number.isInteger) && inside(x, y, z) && Number.isInteger(kind) && kind >= 0 && kind < NAMES.length) {
+          put(x, y, z, kind);
+          remember(x, y, z, kind);
         }
       }
       if (Array.isArray(saved.player) && saved.player.every((v) => typeof v === 'number' && isFinite(v))) {
