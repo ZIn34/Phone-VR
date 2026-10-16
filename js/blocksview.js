@@ -296,6 +296,21 @@ window.PVR = window.PVR || {};
     return boxes;
   };
 
+  // Top right, while real steps can walk you: how many have been felt so far,
+  // or, if the phone is sending no movement readings at all, that steps cannot be felt.
+  PVR.paintStepInfo = function (ctx, width, height, info) {
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const words = info.none ? 'No movement readings from the phone, so steps cannot be felt' : 'Steps felt: ' + info.steps;
+    ctx.font = 'bold 17px sans-serif';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0, 0, 0, .75)';
+    ctx.strokeText(words, width - 16, 38);
+    ctx.fillStyle = info.none ? '#ffb454' : '#fff';
+    ctx.fillText(words, width - 16, 38);
+    ctx.textAlign = 'center';
+  };
+
   // The colour to show for a kind of block in the inventory bar.
   PVR.blockColour = function (kind) {
     const c = COLOURS[kind][kind === B.kinds.GRASS ? 0 : 1];

@@ -35,6 +35,18 @@ test('walking counts about one step for each real step', () => {
   }
 });
 
+test('gentle steps, like a phone held steady in both hands, are counted', () => {
+  for (const size of [0.9, 1.2]) {
+    const steps = run(20, walking(1.8, size));
+    assert.ok(Math.abs(steps - 36) <= 4, `jolts of ${size}: counted ${steps}, really 36`);
+  }
+});
+
+test('a phone held a little shakily, or bumped once, does not keep walking', () => {
+  assert.strictEqual(run(20, (t) => 0.3 * Math.sin(t * 25) + 0.2 * Math.sin(t * 7.3)), 0, 'a shakier hand');
+  assert.ok(run(10, (t) => (t > 3 && t < 3.1 ? 4 : 0)) <= 1, 'one knock is one step at most');
+});
+
 test('gentle steps and heavy steps both count', () => {
   assert.ok(run(10, walking(1.8, 2)) >= 15);
   assert.ok(run(10, walking(1.8, 6)) >= 15);

@@ -7,6 +7,9 @@ hand. The real hand tracker was only run on a photo of two hands.
 
 Link: https://zin34.github.io/Phone-VR/ (the capitals matter).
 
+Check the start page says the newest version number at the bottom. If it is
+older, close the Safari tab and open the link again.
+
 ## 1. Start
 
 1. Open the link in Safari. Pick **Level 1** under How you play.
@@ -45,6 +48,9 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
 3. Walk: take real steps (or step on the spot) and you move forward the way
    you are facing. At Level 1 you can also hold **WALK** (left thumb). At
    Levels 2 and 3 hold up **two fingers** in front of the camera.
+   Top right shows **Steps felt**: it should go up by one with each step. If
+   it says there are no movement readings, Safari is not allowing motion:
+   close the tab, open the link again and tap Allow when asked.
 4. The inventory bar along the bottom shows the blocks you can build with. At
    Level 1 tap one to choose it. At Levels 2 and 3 hold up **three fingers**
    to move to the next one.

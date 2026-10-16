@@ -141,9 +141,11 @@ const hotbarSlots = PVR.blocks.BUILD_WITH.map((kind, i) => {
 // Real steps, felt by the phone's motion sensor, walk you forward.
 const stepCounter = PVR.steps.createStepCounter();
 window.addEventListener('devicemotion', (event) => {
-  if (!PVR.settings.steps || !walkable() || menu.isOpen()) return;
+  // With gravity in, a step is a rise then a dip in its strength; without, both look like bumps.
   const a = event.accelerationIncludingGravity;
-  if (!a || a.x === null) return;
+  if (!a || a.x === null) return; // an empty reading: some browsers send one even with no sensor
+  state.motionReadings++;
+  if (!PVR.settings.steps || !walkable() || menu.isOpen()) return;
   const r = event.rotationRate || {};
   const turn = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
   // Each real step walks one stride; a few can queue up, no more.
@@ -532,7 +534,12 @@ if (view) {
       PVR.paintBlocks(ctx, width, height, world, playBlocks(dt, orientation, focal, width, height, seen, !buttons, paused));
     } else if (state.experience === 'blaster-arena' && blockScene) {
       PVR.paintArena(ctx, width, height, focal, orientation, arena().game, playArena(dt, orientation, focal, width, height, seen, !buttons, paused));
-    } else if (state.experience === 'see-your-room') {
+    }
+    // While real steps can walk you: how many have been felt, or that none can be.
+    if (walkable() && PVR.settings.steps && !paused) {
+      PVR.paintStepInfo(ctx, width, height, { steps: stepCounter.steps, none: state.motionReadings === 0 && now - state.startedAt > 2500 });
+    }
+    if (state.experience === 'see-your-room') {
       PVR.paintMarkers(ctx, width, height, focal, orientation, front);
     }
 
@@ -578,6 +585,8 @@ const state = {
   select: false,     // a SELECT button was pressed since the last frame
   showUntil: 0,      // during a game, the buttons show until this time
   lastTap: 0,        // when the picture was last tapped, to spot a double tap
+  motionReadings: 0, // movement readings from the phone so far, to tell whether any arrive at all
+  startedAt: 0,      // when Start was tapped
   planted: false,    // whether the circle that starts a go has been put in front of the player
 };
 state.best = state.bestShown = bestScore();
@@ -746,6 +755,7 @@ async function start(options) {
     lastFrame = performance.now();
     state.experience = HOME;
     state.showUntil = 0;
+    state.startedAt = performance.now();
     tracking.start();
     if (view) view.start();
     keepAwake();
