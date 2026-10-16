@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createWorld, SIZE } = require('../js/blocks.js');
-const { createShooter, rules, BLASTERS } = require('../js/shooter.js');
+const { createShooter, createTrigger, rules, BLASTERS } = require('../js/shooter.js');
 
 const STEP = 1 / 60;
 const MID = SIZE / 2;
@@ -161,4 +161,43 @@ test('the three blasters behave differently', () => {
   assert.ok(BLASTERS[1].wait < BLASTERS[0].wait / 2);
   assert.ok(BLASTERS[1].damage < BLASTERS[0].damage);
   assert.strictEqual(BLASTERS[1].auto, true);
+});
+
+// The trigger finger, fed 60 times a second with what the hand tracker last
+// saw: it only looks about 12 times a second. finger(t) is how straight the
+// index finger is at time t. Returns how many times it fired.
+function pulls(seconds, finger) {
+  const trigger = createTrigger();
+  let fired = 0, was = false, seen = finger(0);
+  for (let i = 0; i < seconds * 60; i++) {
+    const t = i / 60;
+    if (i % 5 === 0) seen = finger(t);
+    const down = trigger.feed(seen, t);
+    if (down && !was) fired++;
+    was = down;
+  }
+  return fired;
+}
+// A quick curl starting at `at`, down by `depth`, taking `take` seconds there and back.
+const curl = (at, depth, take) => (t) => (t >= at && t < at + take ? depth * Math.sin((t - at) / take * Math.PI) : 0);
+let wobble = 1;
+const shaky = (size) => () => { wobble = (wobble * 16807) % 2147483647; return (wobble / 2147483647 - 0.5) * 2 * size; };
+
+test('a small quick curl of the trigger finger fires once', () => {
+  assert.strictEqual(pulls(3, (t) => 0.97 - curl(1, 0.18, 0.3)(t)), 1);
+  assert.strictEqual(pulls(3, (t) => 0.97 - curl(1, 0.4, 0.4)(t)), 1, 'a deep curl is still one shot');
+  assert.strictEqual(pulls(3, (t) => 0.85 - curl(1, 0.18, 0.3)(t)), 1, 'a finger that is never quite straight');
+});
+
+test('quick pulls one after another each fire, without straightening fully', () => {
+  // Five pulls in two seconds, each opening only part of the way.
+  const finger = (t) => (t < 1 ? 0.97 : 0.97 - 0.1 - 0.15 * Math.max(0, Math.sin((t - 1) * Math.PI * 5)));
+  assert.strictEqual(pulls(3, finger), 5);
+});
+
+test('a still finger, a shaky one, or one slowly drifting does not fire by itself', () => {
+  assert.strictEqual(pulls(20, () => 0.97), 0);
+  const noise = shaky(0.035);
+  assert.strictEqual(pulls(20, () => 0.95 + noise()), 0, 'tracker jitter');
+  assert.strictEqual(pulls(20, (t) => 0.97 - 0.3 * Math.min(1, t / 10)), 0, 'slowly bending over 10 seconds');
 });

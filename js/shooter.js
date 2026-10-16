@@ -221,7 +221,58 @@
     return game;
   }
 
-  const api = { createShooter, rules, BLASTERS, meetsBox };
+  // The trigger finger at Levels 2 and 3. Each reading is how straight the
+  // index finger is: 1 straight, less as it curls. Every hand and every pose is
+  // different, so there is no fixed level: it pulls when the finger curls a
+  // little from how straight it has just been, and lets go when it opens a
+  // little from its deepest curl. Quick small pulls each fire.
+  const triggerRules = {
+    pull: 0.1,       // a curl this much from just before is a pull
+    release: 0.07,   // opening this much from the deepest curl lets go
+    forget: 0.8,     // seconds: a slow drift of the finger is forgotten, so it never fires by itself
+  };
+
+  function createTrigger() {
+    let peak = null;      // how straight the finger has just been
+    let deepest = 1;      // how far it is curled during a pull
+    let lastTime = null;
+    const trigger = {
+      down: false,
+      curl: 0,            // 0 relaxed to 1 at the point of firing, for the meter
+      // straight: the reading; time: in seconds. Returns whether the trigger is down.
+      feed(straight, time) {
+        const dt = lastTime === null ? 0 : Math.max(0, Math.min(0.2, time - lastTime));
+        lastTime = time;
+        if (peak === null) peak = straight;
+        if (!trigger.down) {
+          if (straight > peak) peak = straight;
+          else peak += (straight - peak) * Math.min(1, dt / triggerRules.forget);
+          if (peak - straight > triggerRules.pull) {
+            trigger.down = true;
+            deepest = straight;
+          }
+        } else {
+          deepest = Math.min(deepest, straight);
+          if (straight - deepest > triggerRules.release) {
+            trigger.down = false;
+            peak = straight;
+          }
+        }
+        trigger.curl = trigger.down ? 1 : Math.max(0, Math.min(1, (peak - straight) / triggerRules.pull));
+        return trigger.down;
+      },
+      // The hand went out of sight: start again when it comes back.
+      reset() {
+        peak = null;
+        lastTime = null;
+        trigger.down = false;
+        trigger.curl = 0;
+      },
+    };
+    return trigger;
+  }
+
+  const api = { createShooter, createTrigger, triggerRules, rules, BLASTERS, meetsBox };
   if (inNode) {
     module.exports = api;
   } else {

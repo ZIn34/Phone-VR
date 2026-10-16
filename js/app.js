@@ -181,6 +181,9 @@ for (const name of ['sim', 'real']) {
 const arenaPlay = {
   trigger: false,     // the FIRE button is held
   pulled: false,      // the trigger (button or finger) was down last frame
+  finger: PVR.shooter.createTrigger(), // the trigger finger at Levels 2 and 3
+  kick: 0,            // 1 just after firing, falling to 0: the blaster jumps back
+  queued: 0,          // seconds a pull made while the blaster was not ready is kept, to fire as soon as it is
   flashes: [],        // shots just fired, for drawing
   overFor: 0,         // seconds since the game ended
   signed3: false,
@@ -230,8 +233,10 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
     aim = holding ? holding.palm : null;
     if (holding) {
       hand = { palm: holding.palm, angle: Math.atan2(holding.knuckle[1] - holding.wrist[1], holding.knuckle[0] - holding.wrist[0]) };
-      trigger = holding.straight < (arenaPlay.pulled ? 0.88 : 0.75);
+      trigger = arenaPlay.finger.feed(holding.straight, performance.now() / 1000);
+      hand.curl = arenaPlay.finger.curl;
     } else {
+      arenaPlay.finger.reset();
       trigger = false;
     }
   }
@@ -241,23 +246,30 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
     const eye = land.eyes();
     const blaster = PVR.shooter.BLASTERS[shooter.blaster];
     const pressed = trigger && !arenaPlay.pulled;
+    if (pressed) arenaPlay.queued = 0.4;
     if (shooter.over) {
       arenaPlay.overFor += dt;
       if (pressed && arenaPlay.overFor > 1.5) restartArena();
-    } else if (aim && (pressed || (trigger && blaster.auto))) {
+    } else if (aim && (arenaPlay.queued > 0 || (trigger && blaster.auto))) {
       const shot = shooter.fire(eye, lookThrough(orientation, focal, width, height, aim));
-      if (shot) arenaPlay.flashes.push({ to: shot.to, life: 1 });
+      if (shot) {
+        arenaPlay.flashes.push({ to: shot.to, life: 1 });
+        arenaPlay.kick = 1;
+        arenaPlay.queued = 0;
+      }
     }
     arenaPlay.pulled = trigger;
     shooter.update(dt, eye);
     for (const flash of arenaPlay.flashes) flash.life -= dt / 0.12;
+    arenaPlay.kick = Math.max(0, arenaPlay.kick - dt / 0.15);
+    arenaPlay.queued = Math.max(0, arenaPlay.queued - dt);
     arenaPlay.flashes = arenaPlay.flashes.filter((flash) => flash.life > 0);
   }
 
   blockScene.orientation = orientation;
   blockScene.target = null;
   blockScene.boxes = PVR.arenaBoxes(shooter, performance.now() / 1000, land.eyes());
-  return { handsOn, eye: land.eyes(), aim, hand, flashes: arenaPlay.flashes, best: arenaPlay.bestShown, sign };
+  return { handsOn, eye: land.eyes(), aim, hand, kick: arenaPlay.kick, flashes: arenaPlay.flashes, best: arenaPlay.bestShown, sign };
 }
 const FIST_HOLD = 0.45;   // seconds a fist is held before it breaks a block
 const FIST_AGAIN = 0.7;   // seconds between breaks while it stays held

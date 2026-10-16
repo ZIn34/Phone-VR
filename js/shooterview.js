@@ -45,7 +45,8 @@ window.PVR = window.PVR || {};
 
   // hud: {
   //   handsOn, eye: where your eyes are, aim: [x, y] on the canvas where the blaster points,
-  //   hand: { palm: [x, y], angle } when a hand is holding the blaster, else null,
+  //   hand: { palm: [x, y], angle, curl } when a hand is holding the blaster, else null,
+  //   kick: 1 just after firing, falling to 0,
   //   flashes: [{ to: [x, y, z], life: 0 to 1 }] shots just fired, best: best score, sign }
   PVR.paintArena = function (ctx, width, height, focal, orientation, game, hud) {
     const unit = height / 2;
@@ -64,9 +65,13 @@ window.PVR = window.PVR || {};
     // The blaster: in your hand when it can be seen, else at the bottom right as if held low.
     const held = hud.hand ? hud.hand.palm : [width * 0.78, height * 0.86];
     const angle = hud.hand ? hud.hand.angle : -0.5;
+    const kick = hud.kick || 0;
     ctx.save();
     ctx.translate(held[0], held[1]);
     ctx.rotate(angle);
+    // Firing jumps it back and up a little.
+    ctx.translate(-16 * kick, 0);
+    ctx.rotate(-0.25 * kick);
     ctx.fillStyle = 'rgba(0, 0, 0, .55)';
     ctx.fillRect(-26, -16, 96, 32);
     ctx.fillStyle = '#39404d';
@@ -74,7 +79,22 @@ window.PVR = window.PVR || {};
     ctx.fillRect(-22, 8, 26, 40);     // grip
     ctx.fillStyle = colour;
     ctx.fillRect(40, -12, 26, 24);    // the glowing end
+    if (kick > 0.4) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(74, 0, 14 * kick, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
+    // The trigger meter beside the hand: how far the finger is curled; full means fired.
+    if (hud.hand && !game.over) {
+      const m = { x: held[0] + 44, y: held[1] - 10, w: 12, h: 60 };
+      ctx.fillStyle = 'rgba(0, 0, 0, .55)';
+      ctx.fillRect(m.x - 2, m.y - 2, m.w + 4, m.h + 4);
+      const curl = hud.hand.curl || 0;
+      ctx.fillStyle = curl >= 1 ? '#3dffb0' : '#fff';
+      ctx.fillRect(m.x, m.y + m.h * (1 - curl), m.w, m.h * curl);
+    }
     const muzzle = [held[0] + Math.cos(angle) * 66, held[1] + Math.sin(angle) * 66];
 
     // Shots just fired: a streak from the blaster to where it hit.

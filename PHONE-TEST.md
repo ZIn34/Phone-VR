@@ -90,7 +90,9 @@ too long or too short.
    **NEXT** changes blaster once you have more than one.
 4. Levels 2 and 3: hold your hand up as if holding a blaster. The blaster is
    drawn at your hand and the sight is where your hand is. **Curl your index
-   finger** like pulling a trigger to fire. Three fingers up changes blaster.
+   finger** like pulling a trigger to fire: a small quick curl is enough, and
+   the bar beside the blaster fills as you curl and turns green when it fires.
+   Three fingers up changes blaster.
 5. Walk onto the coloured boxes lying in the arena to pick up the Rapid and
    Heavy blasters.
 6. The health bar is top left. At zero it is game over: FIRE (or a trigger
