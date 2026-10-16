@@ -75,18 +75,20 @@
       wait: 0,         // seconds until the blaster can fire again
       hurtAgo: 99,     // seconds since you were last hit, for the red flash
       onOver: null,    // called with the score when the game ends
+      cover: world.cover, // the walls robots hide behind
+      respawn: true,   // knocked-out robots come back after a while; not in a run of rooms
     };
 
     function freeWall(except) {
       const taken = new Set(game.robots.filter((r) => r !== except && r.state !== 'down').map((r) => r.wall));
-      const free = world.cover.map((wall, i) => i).filter((i) => !taken.has(i));
-      return free.length ? free[Math.floor(random() * free.length)] : Math.floor(random() * world.cover.length);
+      const free = game.cover.map((wall, i) => i).filter((i) => !taken.has(i));
+      return free.length ? free[Math.floor(random() * free.length)] : Math.floor(random() * game.cover.length);
     }
 
     // Puts a robot behind a wall, out of sight.
     function hide(robot) {
       robot.wall = freeWall(robot);
-      const wall = world.cover[robot.wall];
+      const wall = game.cover[robot.wall];
       robot.hidden = wall.behind.slice();
       robot.shown = wall.beside.slice();
       robot.at = robot.hidden.slice();
@@ -104,14 +106,27 @@
     game.restart = function () {
       random = randomFrom(seed++);
       Object.assign(game, { health: rules.health, score: 0, over: false, bolts: [], owned: [0], blaster: 0, wait: 0, hurtAgo: 99 });
+      fill(Math.min(rules.robots, game.cover.length));
+      game.pickups = world.pickupSpots.map((at, i) => ({ at: at.slice(), blaster: 1 + (i % (BLASTERS.length - 1)) }));
+    };
+
+    // One robot hidden behind each wall, coming out in turn.
+    function fill(count) {
       game.robots = [];
-      for (let i = 0; i < Math.min(rules.robots, world.cover.length); i++) {
+      for (let i = 0; i < count; i++) {
         const robot = {};
         game.robots.push(robot);
         hide(robot);
         robot.time *= 0.4 + i * 0.25; // they do not all come out at once
       }
-      game.pickups = world.pickupSpots.map((at, i) => ({ at: at.slice(), blaster: 1 + (i % (BLASTERS.length - 1)) }));
+    }
+
+    // A new room: one robot behind each of its walls, and none come back once knocked out.
+    game.setRoom = function (cover) {
+      game.cover = cover;
+      game.respawn = false;
+      game.bolts = [];
+      fill(cover.length);
     };
 
     // The box a robot takes up, for hitting.
@@ -166,7 +181,7 @@
         robot.hitAgo = (robot.hitAgo === undefined ? 99 : robot.hitAgo) + dt;
         const mix = (from, to, t) => [0, 1, 2].map((i) => from[i] + (to[i] - from[i]) * t);
         if (robot.state === 'down') {
-          if (robot.time <= 0) hide(robot);
+          if (robot.time <= 0 && game.respawn) hide(robot);
         } else if (robot.state === 'hidden') {
           if (robot.time <= 0) { robot.state = 'coming'; robot.time = rules.slide; }
         } else if (robot.state === 'coming') {

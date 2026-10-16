@@ -169,13 +169,15 @@ function walkable() {
   return state.experience === 'block-world' || state.experience === 'blaster-arena';
 }
 
-// Blaster arena: one arena for Simulation and one, with a floor you cannot see, for Real life.
+// Blaster arena: a run through rooms, made afresh each time. One for
+// Simulation and one, with a floor you cannot see, for Real life.
 const ARENA_BEST_KEY = 'phone-vr.blaster-arena.best.v1';
 const arenas = {};
-for (const name of ['sim', 'real']) {
-  const land = PVR.blocks.createWorld(WORLD_SEED + 7, name === 'real', true);
-  arenas[name] = { land, game: PVR.shooter.createShooter(land, Date.now()) };
-  arenas[name].game.onOver = (score) => {
+function makeArena(name) {
+  const land = PVR.blocks.createWorld(WORLD_SEED + 7, name === 'real', 'rooms');
+  const game = PVR.shooter.createShooter(land, Date.now());
+  arenas[name] = { land, game, run: PVR.rooms.createRun(land, game, Date.now()) };
+  game.onOver = (score) => {
     arenaPlay.bestShown = arenaPlay.best;
     if (score > arenaPlay.best) {
       arenaPlay.best = score;
@@ -187,6 +189,8 @@ for (const name of ['sim', 'real']) {
     }
   };
 }
+makeArena('sim');
+makeArena('real');
 const arenaPlay = {
   trigger: false,     // the FIRE button is held
   pulled: false,      // the trigger (button or finger) was down last frame
@@ -206,10 +210,13 @@ try {
 }
 const arena = () => (PVR.settings.real ? arenas.real : arenas.sim);
 
+// A new run, its first room laid out the way you are facing.
 function restartArena() {
-  const { land, game: shooter } = arena();
+  makeArena(PVR.settings.real ? 'real' : 'sim');
+  const { land, run } = arena();
   Object.assign(land.player, { x: land.size / 2 + 0.5, y: 1, z: land.size / 2 + 0.5, fall: 0 });
-  shooter.restart();
+  const facing = PVR.math.rotate(tracking.orientation(), [0, 0, -1]);
+  run.start([facing[0], facing[2]]);
   arenaPlay.bestShown = arenaPlay.best;
   arenaPlay.flashes = [];
   arenaPlay.overFor = 0;
@@ -217,15 +224,12 @@ function restartArena() {
 
 // One frame of Blaster arena. Returns what the painter needs to draw over it.
 function playArena(dt, orientation, focal, width, height, seen, handsOn, paused) {
-  const { land, game: shooter } = arena();
-  let ahead = PVR.math.rotate(orientation, [0, 0, -1]);
-  let walk = blockPlay.walking;
+  const { land, game: shooter, run } = arena();
+  // You do not walk about here: you lean out from your wall and duck back.
+  // At Level 1 LEAN is held to lean out; at Levels 2 and 3 a gun hand raised into view leans you out.
+  let out = blockPlay.walking;
   let sign = 0;
-  if (blockPlay.stride > 0 && !paused) {
-    walk = true;
-    blockPlay.stride = Math.max(0, blockPlay.stride - land.body.speed * dt);
-    if (!blockPlay.walking) ahead = stepAhead(ahead);
-  }
+  blockPlay.stride = 0;
 
   // Where the blaster points, and whether its trigger is down.
   let aim = [width / 2, height / 2];
@@ -234,13 +238,13 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
   if (handsOn) {
     const signOf = (h) => (h.up && h.up[0] && h.up[1] && !h.up[3] ? (h.up[2] ? 3 : 2) : 0);
     sign = seen.reduce((found, h) => found || signOf(h), 0);
-    if (sign === 2) walk = true;
     if (sign === 3 && !arenaPlay.signed3 && !paused) shooter.nextBlaster();
     arenaPlay.signed3 = sign === 3;
     // The hand holding the blaster: it points where the hand is on the screen,
     // and curling the index finger pulls the trigger.
     const holding = seen.find((h) => !signOf(h));
     aim = holding ? holding.palm : null;
+    out = !!holding;
     if (holding) {
       hand = { palm: holding.palm };
       trigger = arenaPlay.finger.feed(holding.straight, performance.now() / 1000);
@@ -252,7 +256,7 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
   }
 
   if (!paused) {
-    land.update(dt, walk && !shooter.over ? [ahead[0], ahead[2]] : null);
+    run.update(dt, out);
     const eye = land.eyes();
     const blaster = PVR.shooter.BLASTERS[shooter.blaster];
     const pressed = trigger && !arenaPlay.pulled;
@@ -279,7 +283,10 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
   blockScene.orientation = orientation;
   blockScene.target = null;
   blockScene.boxes = PVR.arenaBoxes(shooter, performance.now() / 1000, land.eyes());
-  return { handsOn, eye: land.eyes(), aim, hand, kick: arenaPlay.kick, flashes: arenaPlay.flashes, best: arenaPlay.bestShown, sign };
+  return {
+    handsOn, eye: land.eyes(), aim, hand, kick: arenaPlay.kick, flashes: arenaPlay.flashes, best: arenaPlay.bestShown, sign,
+    run: { room: run.room, cleared: run.cleared, state: run.state, hidden: run.hidden() },
+  };
 }
 const FIST_HOLD = 0.45;   // seconds a fist is held before it breaks a block
 const FIST_AGAIN = 0.7;   // seconds between breaks while it stays held
@@ -501,6 +508,7 @@ function fitControls(level, now) {
   // The same three buttons serve both games: walk, and two actions.
   for (const key in blockButtons) blockButtons[key].hidden = !(buttons && (inBlocks || inArena));
   blockButtons.build.textContent = inArena ? 'FIRE' : 'BUILD';
+  blockButtons.walk.textContent = inArena ? 'LEAN' : 'WALK';
   blockButtons.dig.textContent = inArena ? 'NEXT' : 'BREAK';
   if (!inArena) arenaPlay.trigger = false;
   hotbar.hidden = !inBlocks;

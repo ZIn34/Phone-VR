@@ -85,24 +85,24 @@ too long or too short.
 
 ## 3c. Blaster arena
 
-1. From the home menu choose **Blaster arena**. You stand in an arena with
-   walls. Robots hide behind them.
-2. A robot steps out beside its wall, its eye turns red, and it fires one slow
-   orange bolt at you. Walk aside (real steps, WALK, or two fingers) to dodge.
-3. Level 1: put the sight on a robot and tap **FIRE**. Three hits knock it out.
-   **NEXT** changes blaster once you have more than one.
-4. Levels 2 and 3: hold your hand up as if holding a blaster. The blaster is
-   drawn at your hand and the sight is where your hand is. **Curl your index
-   finger** like pulling a trigger to fire: a small quick curl is enough, and
-   the bar beside the blaster fills as you curl and turns green when it fires.
-   Three fingers up changes blaster.
-5. Walk onto the coloured boxes lying in the arena to pick up the Rapid and
-   Heavy blasters.
-6. The health bar is top left. At zero it is game over: FIRE (or a trigger
-   pull) plays again.
+1. From the home menu choose **Blaster arena**. You start in a room, hidden
+   behind a plank wall ("HIDDEN" at the top). The rooms are laid out the way
+   you are facing when you start.
+2. Robots hide behind walls further in. One steps out, its eye turns red, and
+   it fires a slow orange bolt. Behind your wall, bolts cannot reach you.
+3. Lean out to shoot. Level 1: **hold LEAN** (left thumb) to lean out, tap
+   **FIRE** to shoot, and let go of LEAN to duck back. Levels 2 and 3: **raise
+   your gun hand** into view to lean out, **curl your index finger** to fire
+   (a small quick curl is enough), and lower your hand to duck back.
+4. Three hits knock a robot out, and it stays down. When every robot in the
+   room is down, "Room cleared!" shows, the door opens, and you walk through to
+   a new room, made at random. Later rooms have more robots.
+5. A spare blaster waits in rooms 2 and 4. **NEXT** (Level 1) or three fingers
+   up changes blaster.
+6. At zero health it is game over: FIRE (or a trigger pull) starts a new run.
 
-Please tell me: does the trigger pull fire when you mean it to and only then,
-does the blaster follow your hand, are the bolts dodgeable, is it smooth.
+Please tell me: does leaning out and ducking back feel natural, does the
+trigger pull fire when you mean it to and only then, is it too easy or too hard.
 
 ## 4. Head tracking and eye fit
 

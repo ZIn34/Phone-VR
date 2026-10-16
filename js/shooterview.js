@@ -230,19 +230,28 @@ window.PVR = window.PVR || {};
     ctx.lineWidth = 2;
     ctx.strokeRect(90, 22, 268, 30);
     text(ctx, 'HEALTH ' + Math.ceil(game.health), 224, 38, 17);
-    text(ctx, 'Knocked out: ' + game.score, 90, 74, 20, '#fff', 'left');
+    const run = hud.run || { room: 0, cleared: 0 };
+    text(ctx, 'Room ' + run.room + '   Knocked out: ' + game.score, 90, 74, 20, '#fff', 'left');
     text(ctx, S.BLASTERS[game.blaster].name + (game.owned.length > 1 ? '  (' + game.owned.length + ' blasters)' : ''), 90, 100, 18, colour, 'left');
 
     if (game.over) {
       ctx.fillStyle = 'rgba(0, 0, 0, .6)';
       ctx.fillRect(0, 0, width, height);
       text(ctx, 'Game over', cx, cy - 70, 44, '#ff4d4d');
-      text(ctx, 'You knocked out ' + game.score + (game.score === 1 ? ' robot' : ' robots'), cx, cy - 16, 30);
+      text(ctx, 'Rooms cleared: ' + run.cleared + '   Robots knocked out: ' + game.score, cx, cy - 16, 28);
       text(ctx, game.score > hud.best ? 'New best score!' : 'Best ' + hud.best, cx, cy + 26, 24, game.score > hud.best ? '#ffb454' : '#fff');
       text(ctx, hud.handsOn ? 'Pull the trigger to play again' : 'Tap FIRE to play again', cx, cy + 76, 22, '#3dffb0');
-    } else if (hud.handsOn) {
-      const sign = hud.sign === 2 ? 'Two fingers: walking' : (hud.sign === 3 ? 'Three fingers: next blaster' : '');
-      text(ctx, sign || 'Curl your finger: fire    2 fingers: walk    3 fingers: next blaster', cx, height * 0.94, 17, sign ? '#3dffb0' : '#fff');
+    } else if (run.state === 'cleared') {
+      text(ctx, 'Room cleared!', cx, cy - 60, 40, '#3dffb0');
+    } else if (run.state === 'moving') {
+      text(ctx, 'On to room ' + (run.room + 1), cx, cy - 60, 32, '#fff');
+    } else {
+      // Behind your wall: how to lean out. Out: how to fire.
+      const how = hud.handsOn
+        ? (hud.sign === 3 ? 'Three fingers: next blaster' : (run.hidden ? 'Raise your gun hand to lean out' : 'Curl your finger: fire    Lower your hand: hide    3 fingers: next blaster'))
+        : (run.hidden ? 'Hold LEAN to lean out and shoot' : 'FIRE to shoot    Let go of LEAN to hide');
+      text(ctx, how, cx, height * 0.94, 17, run.hidden ? '#ffb454' : '#fff');
+      if (run.hidden) text(ctx, 'HIDDEN', cx, 130, 22, '#ffb454');
     }
   };
 })(window.PVR);

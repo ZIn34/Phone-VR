@@ -74,7 +74,7 @@
   // flat: no land, just a floor you cannot see. arena: a level floor with walls
   // to hide behind, for Blaster arena (flat as well: the floor cannot be seen).
   function createWorld(seed, flat, arena) {
-    const bounded = !!arena;
+    const bounded = arena === true; // a 'rooms' arena goes on for ever, room after room
     const pieces = new Map();   // "cx,cz" -> the blocks of that piece of land
     const edits = {};           // every block the player has changed: "x,y,z" -> kind
     const editsIn = new Map();  // "cx,cz" -> the edits in that piece, to put back when it is made again
@@ -199,7 +199,7 @@
     }
 
     function generate() {
-      if (flat) return; // made as you go
+      if ((flat && !arena) || arena === 'rooms') return; // made as you go
       for (let cx = 0; cx < FIRST; cx++) for (let cz = 0; cz < FIRST; cz++) pieceAt(cx * CHUNK, cz * CHUNK);
       if (arena) { buildArena(); return; }
       // The first land's trees, made just as they always were, kept away from the middle where the player starts.
@@ -274,6 +274,11 @@
       lastCx = NaN;
     }
     let forgetIn = 0;
+
+    // Puts a block anywhere, as the game itself does (rooms are built this way).
+    world.place = function (x, y, z, kind) {
+      if (inside(x, y, z)) set(x, y, z, kind);
+    };
 
     // Whether the player's body would be inside a block if their feet were here.
     function blocked(x, y, z) {
