@@ -59,7 +59,7 @@ window.PVR = window.PVR || {};
   //   tiles(): [{ id, label, caption, group, stay }]   what can be chosen at the current level, with
   //       the section it sits in; stay: choosing it leaves the menu open
   //   choose(id), recentre(), home(), canPlayAgain(), playAgain()
-  //   recipes(): [{ label, run }] things that can be crafted right now, or null where there is no crafting
+  //   recipes(): [{ label, can, run }] things that can be crafted right now, or null where there is no crafting
   // }
   PVR.createMenu = function (actions) {
     const settings = PVR.settings;
@@ -75,6 +75,7 @@ window.PVR = window.PVR || {};
     let pinching = [];          // per hand: is it pinching right now
     let palmTime = 0;
     let restOpen = 0;
+    let restCraft = 0;
 
     function change(name, direction) {
       settings[name] = PVR.clampSetting(name, settings[name] + direction * PVR.settingLimits[name].step);
@@ -89,12 +90,13 @@ window.PVR = window.PVR || {};
       moving = null;
     }
 
-    function open(orientation) {
+    // screen: which screen to open on; the main one unless said.
+    function open(orientation, screen) {
       anchorYaw = math.yawOf(orientation);
       // Level with where you are looking, but never down at the floor or up at the ceiling.
       anchorPitch = Math.max(-10 * RAD, Math.min(12 * RAD, math.pitchOf(orientation)));
-      palmTime = restOpen = 0;
-      show('main');
+      palmTime = restOpen = restCraft = 0;
+      show(screen || 'main');
     }
 
     // The tiles of the current screen. x and y are angles from the middle of the menu.
@@ -148,7 +150,7 @@ window.PVR = window.PVR || {};
         const step = LINE + 0.7 * RAD;
         const count = recipes.length + 1;
         recipes.forEach((recipe, i) => {
-          tile('craft' + i, recipe.label, '', 0, ((count - 1) / 2 - i) * step, 36 * RAD, LINE, recipe.run);
+          tile('craft' + i, recipe.can ? recipe.label : recipe.label + ': need more', '', 0, ((count - 1) / 2 - i) * step, 36 * RAD, LINE, recipe.run);
         });
         tile('back', 'Back', '', 0, ((count - 1) / 2 - recipes.length) * step, 36 * RAD, LINE, () => show('main'));
         return list;
@@ -210,6 +212,7 @@ window.PVR = window.PVR || {};
       //   select: true on the frame a SELECT button at the side was pressed
       //   home: true at the home menu, which is always open
       //   quiet: true while playing a game, when nothing extra should sit in the view
+      //   craft: true where a CRAFT button should be offered (Block world)
       // }
       paint(ctx, width, height, focal, orientation, input, dt) {
         const unit = height / 2;
@@ -247,14 +250,13 @@ window.PVR = window.PVR || {};
               text(ctx, 'MENU', palm.palm[0], palm.palm[1], 20);
             }
           }
-          if (input.handsOn && !input.quiet) {
-            // A MENU button fixed at the right of the view, pressed by resting a fingertip on it.
-            const b = { x: width * 0.86 - 44, y: height / 2 - 30, w: 88, h: 60 };
+          // A button fixed in the view, pressed by resting a fingertip on it. Returns how long it has been rested on.
+          const restButton = (b, words, rested, colour) => {
             const on = input.hands.some((hand) => hand.tip[0] >= b.x && hand.tip[0] <= b.x + b.w && hand.tip[1] >= b.y && hand.tip[1] <= b.y + b.h);
-            restOpen = on ? restOpen + dt : 0;
+            rested = on ? rested + dt : 0;
             ctx.beginPath();
             ctx.roundRect(b.x, b.y, b.w, b.h, 14);
-            ctx.fillStyle = on ? 'rgba(79, 140, 255, .55)' : 'rgba(11, 13, 18, .72)';
+            ctx.fillStyle = on ? 'rgba(79, 140, 255, .55)' : colour;
             ctx.fill();
             ctx.strokeStyle = 'rgba(255, 255, 255, .6)';
             ctx.lineWidth = 3;
@@ -263,14 +265,18 @@ window.PVR = window.PVR || {};
               ctx.save();
               ctx.clip();
               ctx.fillStyle = 'rgba(61, 255, 176, .6)';
-              ctx.fillRect(b.x, b.y, b.w * Math.min(1, restOpen / REST), b.h);
+              ctx.fillRect(b.x, b.y, b.w * Math.min(1, rested / REST), b.h);
               ctx.restore();
             }
-            text(ctx, 'MENU', b.x + b.w / 2, b.y + b.h / 2, 22);
-          } else {
-            restOpen = 0;
-          }
-          if (palmTime >= PALM || restOpen >= REST) open(orientation);
+            text(ctx, words, b.x + b.w / 2, b.y + b.h / 2, 22);
+            return rested;
+          };
+          // MENU at the right of the view, while not playing.
+          restOpen = input.handsOn && !input.quiet ? restButton({ x: width * 0.86 - 44, y: height / 2 - 30, w: 88, h: 60 }, 'MENU', restOpen, 'rgba(11, 13, 18, .72)') : 0;
+          // CRAFT in Block world, a little lower, opening the craft list straight away.
+          restCraft = input.handsOn && input.craft ? restButton({ x: width * 0.86 - 50, y: height / 2 + 50, w: 100, h: 56 }, 'CRAFT', restCraft, 'rgba(120, 80, 30, .75)') : 0;
+          if (restCraft >= REST) open(orientation, 'craft');
+          else if (palmTime >= PALM || restOpen >= REST) open(orientation);
           return;
         }
 

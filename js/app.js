@@ -124,6 +124,8 @@ const blockButtons = {
   dig: document.getElementById('b-break'),
   jump: document.getElementById('b-jump'),
 };
+const craftButton = document.getElementById('b-craft');
+craftButton.addEventListener('click', () => { if (recipes()) menu.open(tracking.orientation(), 'craft'); });
 
 // The inventory bar: one square for each kind of block you can build with.
 const hotbar = document.getElementById('hotbar');
@@ -394,7 +396,7 @@ function recipes() {
   const names = PVR.blocks.NAMES;
   return PVR.blocks.RECIPES.map((recipe) => {
     const from = Object.keys(recipe.from).map((kind) => recipe.from[kind] + ' ' + names[kind] + ' (have ' + world.have[kind] + ')').join(' + ');
-    return { label: recipe.count + ' ' + recipe.name + ' from ' + from, run: () => world.craft(recipe) };
+    return { label: recipe.count + ' ' + recipe.name + ' from ' + from, can: world.canCraft(recipe), run: () => world.craft(recipe) };
   });
 }
 
@@ -478,6 +480,8 @@ function fitControls(level, now) {
     slot.classList.toggle('none', !world.unlimited && count === 0);
   });
   blockButtons.jump.hidden = !(buttons && inBlocks);
+  // Crafting straight from play, where there are blocks to craft with.
+  craftButton.hidden = !(buttons && inBlocks && recipes());
   blockButtons.jump.textContent = world.flying ? 'LAND' : 'JUMP';
   if (!inBlocks && !inArena) { blockPlay.walking = false; blockPlay.stride = 0; }
   if (view) view.setScene(state.experience === 'block-world' || inArenaGame ? blockScene : null);
@@ -545,6 +549,7 @@ if (view) {
 
     menu.paint(ctx, width, height, focal, orientation, {
       hands: seen, handsOn: !buttons, select: state.select, home: state.experience === HOME, quiet: isGame(),
+      craft: state.experience === 'block-world' && !!recipes(),
     }, dt);
     state.select = false;
     if (level > 1) PVR.paintHands(ctx, width, height, seen, hands.status);

@@ -70,7 +70,8 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
    you and take health when they reach you. Hit them with BREAK (Level 1) or
    a fist (Levels 2 and 3). Knocking out an animal gives health back.
 9. Breaking a block gives you that block; the numbers in the bar are how
-   many you have. Open the menu and choose **Craft** to turn them into
+   many you have. Tap **CRAFT** (Level 1, under BREAK) or rest a fingertip
+   on the **CRAFT** button at the right (Levels 2 and 3) to turn them into
    planks, brick, glass or a lamp.
 10. If moving the phone about makes you walk by mistake, turn off **Walk by
    stepping** in Settings.

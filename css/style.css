@@ -279,6 +279,7 @@ html, body {
 .block-button.jump { left: calc(.3rem + env(safe-area-inset-left)); top: calc(50% - 7.8rem); }
 .block-button.build { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% - 4.4rem); }
 .block-button.break { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% + .2rem); }
+.block-button.craft { right: calc(.3rem + env(safe-area-inset-right)); top: calc(50% + 4.8rem); height: 3rem; background: rgba(120, 80, 30, .7); }
 
 /* The inventory bar: the blocks you can build with, along the bottom. */
 .hotbar {
