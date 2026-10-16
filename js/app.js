@@ -242,7 +242,7 @@ function playArena(dt, orientation, focal, width, height, seen, handsOn, paused)
     const holding = seen.find((h) => !signOf(h));
     aim = holding ? holding.palm : null;
     if (holding) {
-      hand = { palm: holding.palm, angle: Math.atan2(holding.knuckle[1] - holding.wrist[1], holding.knuckle[0] - holding.wrist[0]) };
+      hand = { palm: holding.palm };
       trigger = arenaPlay.finger.feed(holding.straight, performance.now() / 1000);
       hand.curl = arenaPlay.finger.curl;
     } else {

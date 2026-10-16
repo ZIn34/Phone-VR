@@ -33,6 +33,105 @@ window.PVR = window.PVR || {};
     return boxes;
   };
 
+  // The three blasters, each built from boxes. Each box is [from, to] along
+  // the barrel, below and above its line, half its width, and what it is made
+  // of: 'body', 'dark', 'trim' (the blaster's own colour) or 'glow'. Sizes are
+  // in metres, as if held about 45 cm from your eyes.
+  const SHAPES = [
+    [ // Blaster: short and neat.
+      [-0.05, 0.08, -0.025, 0.028, 0.022, 'body'],
+      [0.08, 0.16, -0.012, 0.018, 0.013, 'dark'],
+      [0.16, 0.18, -0.014, 0.020, 0.015, 'glow'],
+      [-0.05, -0.005, -0.11, -0.025, 0.018, 'dark'],
+      [0.0, 0.035, -0.06, -0.025, 0.005, 'body'],
+      [-0.02, 0.06, 0.028, 0.036, 0.008, 'trim'],
+    ],
+    [ // Rapid: long, with two barrels and a magazine.
+      [-0.06, 0.10, -0.022, 0.024, 0.02, 'body'],
+      [0.10, 0.22, 0.002, 0.016, 0.007, 'dark'],
+      [0.10, 0.22, -0.016, -0.002, 0.007, 'dark'],
+      [0.22, 0.235, -0.018, 0.018, 0.012, 'glow'],
+      [-0.05, -0.01, -0.10, -0.022, 0.016, 'dark'],
+      [0.03, 0.07, -0.09, -0.022, 0.012, 'trim'],
+      [-0.06, 0.10, 0.024, 0.03, 0.01, 'trim'],
+    ],
+    [ // Heavy: short and fat, with a wide muzzle.
+      [-0.06, 0.07, -0.035, 0.04, 0.034, 'body'],
+      [0.07, 0.14, -0.026, 0.032, 0.028, 'dark'],
+      [0.14, 0.165, -0.034, 0.04, 0.036, 'glow'],
+      [-0.055, -0.005, -0.12, -0.035, 0.02, 'dark'],
+      [-0.03, 0.05, 0.04, 0.05, 0.02, 'trim'],
+      [0.07, 0.14, -0.034, -0.026, 0.03, 'trim'],
+    ],
+  ];
+  const DARK = [0.16, 0.18, 0.22], BODY = [0.3, 0.33, 0.4];
+  const LIGHT = (() => { const l = [-0.35, 0.8, 0.5]; const n = Math.hypot(...l); return l.map((v) => v / n); })();
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const unitOf = (a) => scale(a, 1 / (Math.hypot(a[0], a[1], a[2]) || 1));
+
+  // Draws the blaster held at one point of the picture and pointing at
+  // another, in perspective and lit from above. Places here are from the eye:
+  // x right, y up, z back. Returns where its end is on the canvas, for shots.
+  function paintBlaster(ctx, width, height, focal, held, aim, kind, kick, colour) {
+    const unit = height / 2;
+    const ray = (p) => [(p[0] - width / 2) / (focal * unit), -(p[1] - height / 2) / (focal * unit), -1];
+    const toCanvas = (p) => [width / 2 + focal * p[0] / -p[2] * unit, height / 2 - focal * p[1] / -p[2] * unit];
+    let origin = scale(ray(held), 0.45);
+    let ahead = unitOf(add(scale(ray(aim), 5), scale(origin, -1)));
+    let right = unitOf(cross(ahead, [0, 1, 0]));
+    let up = cross(right, ahead);
+    // Firing jumps it back and tips it up.
+    origin = add(origin, scale(ahead, -0.035 * kick));
+    ahead = unitOf(add(ahead, scale(up, 0.35 * kick)));
+    up = cross(right, ahead);
+    const at = (a, u, r) => add(add(add(origin, scale(ahead, a)), scale(up, u)), scale(right, r));
+    const trim = colour.map((v) => v);
+    const faces = [];
+    for (const [a0, a1, u0, u1, half, made] of SHAPES[kind] || SHAPES[0]) {
+      const c = [];
+      for (const a of [a0, a1]) for (const u of [u0, u1]) for (const r of [-half, half]) c.push(at(a, u, r));
+      // The six sides, each with its outward direction.
+      const sides = [
+        [[0, 1, 3, 2], scale(ahead, -1)], [[4, 6, 7, 5], ahead],
+        [[0, 4, 5, 1], scale(up, -1)], [[2, 3, 7, 6], up],
+        [[0, 2, 6, 4], scale(right, -1)], [[1, 5, 7, 3], right],
+      ];
+      const base = made === 'glow' ? trim : made === 'trim' ? trim : made === 'dark' ? DARK : BODY;
+      for (const [corners, out] of sides) {
+        const points = corners.map((i) => c[i]);
+        const middle = scale(points.reduce(add, [0, 0, 0]), 0.25);
+        if (dot(out, middle) >= 0) continue;                    // turned away from the eye
+        if (points.some((p) => p[2] > -0.05)) continue;
+        const light = made === 'glow' ? 1 : 0.35 + 0.65 * Math.max(0, dot(out, LIGHT));
+        faces.push({ far: middle[2], points: points.map(toCanvas), shade: base.map((v) => Math.round(Math.min(1, v * light) * 255)), glow: made === 'glow' });
+      }
+    }
+    faces.sort((one, two) => one.far - two.far); // furthest first
+    ctx.lineJoin = 'round';
+    for (const face of faces) {
+      ctx.beginPath();
+      face.points.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${face.shade.join(', ')})`;
+      ctx.fill();
+      ctx.strokeStyle = face.glow ? 'rgba(255, 255, 255, .7)' : 'rgba(0, 0, 0, .45)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    const shape = SHAPES[kind] || SHAPES[0];
+    const end = toCanvas(at(Math.max(...shape.map((b) => b[1])), 0.004, 0));
+    if (kick > 0.4) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(end[0], end[1], 16 * kick, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return end;
+  }
+
   function text(ctx, words, x, y, size, colour, align) {
     ctx.font = `bold ${size}px sans-serif`;
     ctx.textAlign = align || 'center';
@@ -45,7 +144,7 @@ window.PVR = window.PVR || {};
 
   // hud: {
   //   handsOn, eye: where your eyes are, aim: [x, y] on the canvas where the blaster points,
-  //   hand: { palm: [x, y], angle, curl } when a hand is holding the blaster, else null,
+  //   hand: { palm: [x, y], curl } when a hand is holding the blaster, else null,
   //   kick: 1 just after firing, falling to 0,
   //   flashes: [{ to: [x, y, z], life: 0 to 1 }] shots just fired, best: best score, sign }
   PVR.paintArena = function (ctx, width, height, focal, orientation, game, hud) {
@@ -62,40 +161,22 @@ window.PVR = window.PVR || {};
       return d[2] > -0.05 ? null : [cx + focal * d[0] / -d[2] * unit, cy - focal * d[1] / -d[2] * unit];
     };
 
-    // The blaster: in your hand when it can be seen, else at the bottom right as if held low.
-    const held = hud.hand ? hud.hand.palm : [width * 0.78, height * 0.86];
-    const angle = hud.hand ? hud.hand.angle : -0.5;
-    const kick = hud.kick || 0;
-    ctx.save();
-    ctx.translate(held[0], held[1]);
-    ctx.rotate(angle);
-    // Firing jumps it back and up a little.
-    ctx.translate(-16 * kick, 0);
-    ctx.rotate(-0.25 * kick);
-    ctx.fillStyle = 'rgba(0, 0, 0, .55)';
-    ctx.fillRect(-26, -16, 96, 32);
-    ctx.fillStyle = '#39404d';
-    ctx.fillRect(-22, -12, 88, 24);   // barrel
-    ctx.fillRect(-22, 8, 26, 40);     // grip
-    ctx.fillStyle = colour;
-    ctx.fillRect(40, -12, 26, 24);    // the glowing end
-    if (kick > 0.4) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(74, 0, 14 * kick, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    // The blaster: a solid shape in front of you, held where your hand is
+    // (else low at the bottom right), pointing at where it will hit.
+    // With a hand, the sight is where the hand points, so the blaster sits a
+    // little below and to the right of it, as if gripped there.
+    const held = hud.hand ? hud.hand.palm : [width * 0.8, height * 0.88];
+    const grip = hud.hand ? [Math.min(width * 0.9, held[0] + 0.5 * unit), Math.min(height * 0.86, held[1] + 0.55 * unit)] : held;
+    const muzzle = paintBlaster(ctx, width, height, focal, grip, hud.aim || [cx, cy], game.blaster, hud.kick || 0, COLOURS[game.blaster]);
     // The trigger meter beside the hand: how far the finger is curled; full means fired.
     if (hud.hand && !game.over) {
-      const m = { x: held[0] + 44, y: held[1] - 10, w: 12, h: 60 };
+      const m = { x: grip[0] - 70, y: grip[1] - 30, w: 12, h: 60 };
       ctx.fillStyle = 'rgba(0, 0, 0, .55)';
       ctx.fillRect(m.x - 2, m.y - 2, m.w + 4, m.h + 4);
       const curl = hud.hand.curl || 0;
       ctx.fillStyle = curl >= 1 ? '#3dffb0' : '#fff';
       ctx.fillRect(m.x, m.y + m.h * (1 - curl), m.w, m.h * curl);
     }
-    const muzzle = [held[0] + Math.cos(angle) * 66, held[1] + Math.sin(angle) * 66];
 
     // Shots just fired: a streak from the blaster to where it hit.
     for (const flash of hud.flashes) {
