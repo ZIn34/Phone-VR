@@ -66,7 +66,60 @@
     return counter;
   }
 
-  const api = { createStepCounter, rules };
+  // Which way the steps are going. Give it the phone's movement as the world
+  // sees it: x east, y up, z south (gravity in or out; it works out which).
+  //
+  // When you walk, you rise and fall once each step, and you are fastest
+  // along the way you are going at the bottom of each fall, when your foot
+  // lands, and slowest at the top. So the way you are going is the way your
+  // speed swings in time with the up-and-down push of each step. Walking
+  // backwards it swings backwards, and so on. Swaying from side to side swings
+  // once every two steps, so it does not get in the way.
+  const wayRules = {
+    leak: 0.5,      // seconds: speed is worked out from movement, slowly forgetting, so it cannot drift away
+    over: 1.3,      // seconds: about the last two steps are weighed
+    sure: 0.3,      // below this certainty (0 to 1), steps go forward
+  };
+
+  function createStepWay() {
+    const mean = [0, 0, 0];   // the steady part of the movement: gravity, and any tilt
+    const speed = [0, 0];     // how fast you are moving east and south, against your usual speed
+    let along = [0, 0];       // speed swing times up-and-down push, weighed over the last steps
+    let size = 1e-9;          // the same without direction, to judge how sure it is
+    let lastTime = null;
+    let started = 0;
+    return {
+      feed(x, y, z, time) {
+        const dt = lastTime === null ? 0 : Math.max(0, Math.min(0.1, (time - lastTime) / 1000));
+        lastTime = time;
+        started += dt;
+        const settle = Math.min(1, dt / 1.0);
+        const now = [x, y, z];
+        for (let i = 0; i < 3; i++) mean[i] += (now[i] - mean[i]) * (started < 0.3 ? 1 : settle);
+        const up = y - mean[1];
+        const keep = Math.exp(-dt / wayRules.leak);
+        speed[0] = (speed[0] + (x - mean[0]) * dt) * keep;
+        speed[1] = (speed[1] + (z - mean[2]) * dt) * keep;
+        const weigh = Math.min(1, dt / wayRules.over);
+        along = [along[0] + (up * speed[0] - along[0]) * weigh, along[1] + (up * speed[1] - along[1]) * weigh];
+        size += (Math.abs(up) * Math.hypot(speed[0], speed[1]) - size) * weigh;
+      },
+      // The way of the last steps, as a turn from the way you face (radians, a
+      // quarter turn at a time; positive is to the left), or 0 for forward when unsure.
+      // facing: [x, z], the way you face, flat.
+      turn(facing) {
+        const sure = Math.hypot(along[0], along[1]) / Math.max(size, 1e-9);
+        if (sure < wayRules.sure) return 0;
+        const across = facing[1] * along[0] - facing[0] * along[1];
+        const ahead = facing[0] * along[0] + facing[1] * along[1];
+        const angle = Math.atan2(across, ahead);
+        return Math.round(angle / (Math.PI / 2)) * (Math.PI / 2) + 0; // + 0: never minus nought
+      },
+      sureness() { return Math.hypot(along[0], along[1]) / Math.max(size, 1e-9); },
+    };
+  }
+
+  const api = { createStepCounter, createStepWay, rules, wayRules };
   if (inNode) {
     module.exports = api;
   } else {

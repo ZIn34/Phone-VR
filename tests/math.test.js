@@ -78,3 +78,21 @@ test('the pretend head used on a computer moves the same way as the real sensor'
   near(m.project(m.fromYawPitch(-10 * RAD, 0), front, FOCAL)[0], FOCAL * Math.tan(10 * RAD), 'turn left, marker goes right');
   near(m.project(m.fromYawPitch(0, 10 * RAD), front, FOCAL)[1], -FOCAL * Math.tan(10 * RAD), 'look up, horizon goes down');
 });
+
+test('a phone movement reading comes out the right way round in the world', () => {
+  const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
+  // Flat on a table, top pointing north: gravity's reading (out of the screen) is up.
+  assert.ok(near(m.phoneToWorld(m.phoneFrame(0, 0, 0), [0, 0, 9.81]), [0, 9.81, 0]));
+  // Held up, facing north: its top is up, and moving it to its right is moving east.
+  const upright = m.phoneFrame(0, 90, 0);
+  assert.ok(near(m.phoneToWorld(upright, [0, 9.81, 0]), [0, 9.81, 0]));
+  assert.ok(near(m.phoneToWorld(upright, [1, 0, 0]), [1, 0, 0]));
+  assert.ok(near(m.phoneToWorld(upright, [0, 0, 1]), [0, 0, 1]), 'out of the screen, towards you: south');
+  // Worked back from the camera: the same as read straight from the sensor, upright or sideways.
+  for (const [alpha, beta, gamma, screen] of [[30, 80, 5, 0], [200, 10, -70, 90], [90, -20, 60, -90]]) {
+    const camera = m.fromDeviceOrientation(alpha, beta, gamma, screen);
+    const back = m.phoneFrameOf(camera, screen), direct = m.phoneFrame(alpha, beta, gamma);
+    const same = near(back, direct) || near(back, direct.map((v) => -v));
+    assert.ok(same, `${alpha},${beta},${gamma},${screen}`);
+  }
+});

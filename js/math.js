@@ -40,19 +40,34 @@
   // Which way the back camera points, from the phone's motion sensor reading
   // (alpha, beta, gamma in degrees) and how the screen is turned (0, 90, -90, 180).
   function fromDeviceOrientation(alphaDegrees, betaDegrees, gammaDegrees, screenDegrees) {
+    return multiply(multiply(phoneFrame(alphaDegrees, betaDegrees, gammaDegrees), BACK_OF_PHONE), axisAngle([0, 0, 1], -screenDegrees * RAD));
+  }
+
+  // The camera looks out of the back of the phone, not out of the top.
+  const BACK_OF_PHONE = [-Math.SQRT1_2, 0, 0, Math.SQRT1_2];
+
+  // How the phone itself is turned, before the camera and screen are allowed for.
+  function phoneFrame(alphaDegrees, betaDegrees, gammaDegrees) {
     const x = betaDegrees * RAD, y = alphaDegrees * RAD, z = -gammaDegrees * RAD;
     const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
     const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
-    const device = [
+    return [
       s1 * c2 * c3 + c1 * s2 * s3,
       c1 * s2 * c3 - s1 * c2 * s3,
       c1 * c2 * s3 - s1 * s2 * c3,
       c1 * c2 * c3 + s1 * s2 * s3,
     ];
-    // The camera looks out of the back of the phone, not out of the top.
-    const backOfPhone = [-Math.SQRT1_2, 0, 0, Math.SQRT1_2];
-    const screen = axisAngle([0, 0, 1], -screenDegrees * RAD);
-    return multiply(multiply(device, backOfPhone), screen);
+  }
+
+  // The same, worked back from which way the camera points (screen upright, or turned).
+  function phoneFrameOf(cameraOrientation, screenDegrees) {
+    return multiply(cameraOrientation, conjugate(multiply(BACK_OF_PHONE, axisAngle([0, 0, 1], -screenDegrees * RAD))));
+  }
+
+  // A movement the phone measured (its own x right, y to its top, z out of the
+  // screen) as the world sees it: x east, y up, z south.
+  function phoneToWorld(frame, reading) {
+    return rotate(frame, [reading[0], reading[2], -reading[1]]);
   }
 
   // A pretend head: yaw to the right, pitch up. Used when there are no sensors.
@@ -83,7 +98,7 @@
     return [focal * d[0] / -d[2], focal * d[1] / -d[2]];
   }
 
-  const api = { multiply, conjugate, axisAngle, rotate, fromDeviceOrientation, fromYawPitch, direction, yawOf, pitchOf, project };
+  const api = { multiply, conjugate, axisAngle, rotate, fromDeviceOrientation, phoneFrame, phoneFrameOf, phoneToWorld, fromYawPitch, direction, yawOf, pitchOf, project };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

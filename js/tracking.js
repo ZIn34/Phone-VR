@@ -16,6 +16,7 @@ window.PVR = window.PVR || {};
 
   PVR.createTracking = function (onSensor) {
     let sensor = null;        // latest reading from the phone, as a quaternion
+    let phone = null;         // the same, for the phone itself rather than its camera
     let pretendYaw = 0;
     let pretendPitch = 0;
     let frontYaw = 0;         // which way "front" is, set by re-centring
@@ -26,6 +27,7 @@ window.PVR = window.PVR || {};
       if (event.alpha === null || event.beta === null || event.gamma === null) return;
       const first = !sensor;
       sensor = math.fromDeviceOrientation(event.alpha, event.beta, event.gamma, screenAngle());
+      phone = math.phoneFrame(event.alpha, event.beta, event.gamma);
       if (centreOnNextReading) {
         centreOnNextReading = false;
         frontYaw = math.yawOf(sensor);
@@ -51,6 +53,8 @@ window.PVR = window.PVR || {};
       },
       hasSensor() { return !!sensor; },
       orientation() { return sensor || math.fromYawPitch(pretendYaw, pretendPitch); },
+      // How the phone itself is turned, to turn its movement readings into the world's.
+      phone() { return (sensor && phone) || math.phoneFrameOf(tracking.orientation(), screenAngle()); },
       frontYaw() { return frontYaw; },
       // Makes "front" the way the viewer is looking right now.
       recentre() { frontYaw = math.yawOf(tracking.orientation()); },

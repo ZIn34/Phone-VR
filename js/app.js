@@ -140,8 +140,9 @@ const hotbarSlots = PVR.blocks.BUILD_WITH.map((kind, i) => {
   return slot;
 });
 
-// Real steps, felt by the phone's motion sensor, walk you forward.
+// Real steps, felt by the phone's motion sensor, walk you the way you step.
 const stepCounter = PVR.steps.createStepCounter();
+const stepWay = PVR.steps.createStepWay();
 window.addEventListener('devicemotion', (event) => {
   // With gravity in, a step is a rise then a dip in its strength; without, both look like bumps.
   const a = event.accelerationIncludingGravity;
@@ -150,9 +151,17 @@ window.addEventListener('devicemotion', (event) => {
   if (!PVR.settings.steps || !walkable() || menu.isOpen()) return;
   const r = event.rotationRate || {};
   const turn = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
+  const moved = PVR.math.phoneToWorld(tracking.phone(), [a.x, a.y, a.z]);
+  stepWay.feed(moved[0], moved[1], moved[2], performance.now());
   // Each real step walks one stride; a few can queue up, no more.
   const body = (state.experience === 'blaster-arena' ? arena().land : world).body;
-  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) blockPlay.stride = Math.min(blockPlay.stride + body.stride, body.stride * 3);
+  if (stepCounter.feed(a.x, a.y, a.z, turn, performance.now())) {
+    blockPlay.stride = Math.min(blockPlay.stride + body.stride, body.stride * 3);
+    // Which way, as a turn from where you face.
+    const facing = PVR.math.rotate(tracking.orientation(), [0, 0, -1]);
+    const flat = Math.hypot(facing[0], facing[2]) || 1;
+    blockPlay.strideTurn = PVR.settings.stepWay ? stepWay.turn([facing[0] / flat, facing[2] / flat]) : 0;
+  }
 });
 
 // Whether you are somewhere you can walk about in.
@@ -209,12 +218,13 @@ function restartArena() {
 // One frame of Blaster arena. Returns what the painter needs to draw over it.
 function playArena(dt, orientation, focal, width, height, seen, handsOn, paused) {
   const { land, game: shooter } = arena();
-  const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
+  let ahead = PVR.math.rotate(orientation, [0, 0, -1]);
   let walk = blockPlay.walking;
   let sign = 0;
   if (blockPlay.stride > 0 && !paused) {
     walk = true;
     blockPlay.stride = Math.max(0, blockPlay.stride - land.body.speed * dt);
+    if (!blockPlay.walking) ahead = stepAhead(ahead);
   }
 
   // Where the blaster points, and whether its trigger is down.
@@ -276,6 +286,7 @@ const FIST_AGAIN = 0.7;   // seconds between breaks while it stays held
 const blockPlay = {
   walking: false,     // the WALK button is held
   stride: 0,          // blocks still to walk from real steps already taken
+  strideTurn: 0,      // which way those steps go, as a turn from where you face (radians, left positive)
   sign: 0,            // 2 or 3: that many fingers are being held up
   flySign: 0,         // seconds the flying sign has been held
   flySigned: false,   // it has already been acted on this time
@@ -305,15 +316,24 @@ function lookThrough(orientation, focal, width, height, point) {
   return PVR.math.rotate(orientation, [x / length, y / length, -1 / length]);
 }
 
+// The way real steps take you: where you face, level, turned the way the steps went.
+function stepAhead(ahead) {
+  const turn = blockPlay.strideTurn;
+  if (!turn) return ahead;
+  const c = Math.cos(turn), s = Math.sin(turn);
+  return [ahead[0] * c + ahead[2] * s, 0, -ahead[0] * s + ahead[2] * c];
+}
+
 // One frame of Block world. Returns what the painter needs to draw over it.
 function playBlocks(dt, orientation, focal, width, height, seen, handsOn, paused) {
-  const ahead = PVR.math.rotate(orientation, [0, 0, -1]);
+  let ahead = PVR.math.rotate(orientation, [0, 0, -1]);
   let walk = blockPlay.walking;
   if (!handsOn || paused) blockPlay.sign = 0;
-  // Real steps already taken are walked off a little each frame.
+  // Real steps already taken are walked off a little each frame, the way they went.
   if (blockPlay.stride > 0 && !paused) {
     walk = true;
     blockPlay.stride = Math.max(0, blockPlay.stride - world.body.speed * dt);
+    if (!blockPlay.walking) ahead = stepAhead(ahead);
   }
   let aimPoint = [width / 2, height / 2];
 
@@ -553,7 +573,8 @@ if (view) {
     }
     // While real steps can walk you: how many have been felt, or that none can be.
     if (walkable() && PVR.settings.steps && !paused) {
-      PVR.paintStepInfo(ctx, width, height, { steps: stepCounter.steps, none: state.motionReadings === 0 && now - state.startedAt > 2500 });
+      const way = PVR.settings.stepWay && stepCounter.steps ? ['forward', 'left', 'back', 'right'][((Math.round(blockPlay.strideTurn / (Math.PI / 2)) % 4) + 4) % 4] : '';
+      PVR.paintStepInfo(ctx, width, height, { steps: stepCounter.steps, way, none: state.motionReadings === 0 && now - state.startedAt > 2500 });
     }
     if (state.experience === 'see-your-room') {
       PVR.paintMarkers(ctx, width, height, focal, orientation, front);

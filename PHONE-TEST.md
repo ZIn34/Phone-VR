@@ -48,7 +48,10 @@ Please tell me: too easy or too hard, too fast at the end, comfortable or not.
 3. Walk: take real steps (or step on the spot) and you move forward the way
    you are facing. At Level 1 you can also hold **WALK** (left thumb). At
    Levels 2 and 3 hold up **two fingers** in front of the camera.
-   Top right shows **Steps felt**: it should go up by one with each step. If
+   Steps go the way you step: walk backwards or sideways (keep looking
+   ahead) and you should move that way after a step or two. **Step
+   direction** in Settings sets it back to always forward.
+   Top right shows **Steps felt** and which way: it should go up by one with each step. If
    it says there are no movement readings, Safari is not allowing motion:
    close the tab, open the link again and tap Allow when asked.
 4. The inventory bar along the bottom shows the blocks you can build with. At

@@ -11,6 +11,7 @@ window.PVR = window.PVR || {};
   PVR.defaultSettings = {
     level: 1,           // how you play: 1 screen buttons, 2 one hand, 3 both hands
     steps: true,        // real steps move you forward in games you can walk in
+    stepWay: true,      // real steps go the way you step (back, left, right), not only forward
     real: false,        // false: Simulation, only the game's own world. true: Real life, the game's things appear in your room
     lenses: false,      // false: window mode, one full-screen picture. true: headset view, two eye pictures for lenses
     separation: 0.46,   // distance between the two picture centres, as a share of the screen width
@@ -33,6 +34,7 @@ window.PVR = window.PVR || {};
   PVR.settingToggles = [
     { name: 'real', label: 'World', on: 'Real life', off: 'Simulation' },
     { name: 'steps', label: 'Walk by stepping', on: 'On', off: 'Off' },
+    { name: 'stepWay', label: 'Step direction', on: 'As you step', off: 'Always forward' },
   ];
 
   PVR.settings = Object.assign({}, PVR.defaultSettings);
