@@ -70,6 +70,7 @@ game.onFinish = (score) => {
 
 function playAgain() {
   if (state.experience === 'blaster-arena') restartArena();
+  if (inArcade()) arcade.start(state.experience);
   playAgainButton.hidden = true;
   state.bestShown = state.best;
   state.planted = false;
@@ -118,6 +119,12 @@ try {
 } catch (err) {
   blockScene = null;
 }
+// The arcade games share one way of playing: see arcade.js.
+const arcade = blockScene ? PVR.createArcade(blockScene, tracking) : null;
+const inArcade = () => !!arcade && arcade.has(state.experience);
+// The two side buttons at Level 1, as the arcade games use them: held, and pressed since the last frame.
+const sides = { held: { left: false, right: false }, taps: { left: false, right: false } };
+let arcadeWas = false; // an arcade game was showing last frame
 const blockButtons = {
   walk: document.getElementById('b-walk'),
   build: document.getElementById('b-build'),
@@ -456,7 +463,8 @@ const menu = PVR.createMenu({
   home: goHome,
   recipes,
   playAgain,
-  canPlayAgain: () => (state.experience === 'follow-the-circle' && game.phase === 'done') || (state.experience === 'blaster-arena' && arena().game.over),
+  canPlayAgain: () => (state.experience === 'follow-the-circle' && game.phase === 'done') || (state.experience === 'blaster-arena' && arena().game.over)
+    || (inArcade() && arcade.game(state.experience).over),
 });
 
 // Goes from one activity straight to another without leaving VR.
@@ -495,6 +503,8 @@ function fitControls(level, now) {
   // If hand tracking cannot start, the side buttons take over so nobody is stuck.
   const buttons = level === 1 || hands.status === 'failed';
   const label = menu.isOpen() ? 'SELECT' : (state.experience === 'pop-the-targets' ? 'POP' : '');
+  const arcadeOn = inArcade() && !menu.isOpen();
+  const labels = arcadeOn ? arcade.buttons(state.experience) : { left: label, right: label };
   // Real life or Simulation: which block world is in use, and whether the camera shows behind it.
   world = PVR.settings.real ? worlds.real : worlds.sim;
   const inArenaGame = state.experience === 'blaster-arena' && !!blockScene;
@@ -502,6 +512,7 @@ function fitControls(level, now) {
     blockScene.world = inArenaGame ? arena().land : world;
     blockScene.seeThrough = PVR.settings.real;
     if (!inArenaGame) blockScene.boxes = [];
+    if (!inArcade()) blockScene.sky = blockScene.haze = null;
   }
   const inBlocks = state.experience === 'block-world' && !!blockScene && !menu.isOpen();
   const inArena = inArenaGame && !menu.isOpen();
@@ -524,11 +535,15 @@ function fitControls(level, now) {
   craftButton.hidden = !(buttons && inBlocks && recipes());
   blockButtons.jump.textContent = world.flying ? 'LAND' : 'JUMP';
   if (!inBlocks && !inArena) { blockPlay.walking = false; blockPlay.stride = 0; }
-  if (view) view.setScene(state.experience === 'block-world' || inArenaGame ? blockScene : null);
-  for (const button of sideButtons) {
-    button.hidden = !(buttons && label);
-    if (label) button.textContent = label;
-  }
+  if (view) view.setScene(state.experience === 'block-world' || inArenaGame || inArcade() ? blockScene : null);
+  sideButtons.forEach((button, i) => {
+    const words = i ? labels.right : labels.left;
+    button.hidden = !(buttons && words);
+    if (words) button.textContent = words;
+    // Some games colour their buttons, as Beat blocks does red and blue.
+    button.style.background = (labels.colours && (i ? labels.colours.right : labels.colours.left)) || '';
+  });
+  if (!arcadeOn) sides.held.left = sides.held.right = false;
   // While playing a game the other buttons stay off the screen.
   screens.vr.classList.toggle('bare', isGame() && !menu.isOpen() && now > state.showUntil);
   screens.vr.classList.toggle('one', !PVR.settings.lenses);
@@ -578,7 +593,15 @@ if (view) {
       PVR.paintBlocks(ctx, width, height, world, playBlocks(dt, orientation, focal, width, height, seen, !buttons, paused));
     } else if (state.experience === 'blaster-arena' && blockScene) {
       PVR.paintArena(ctx, width, height, focal, orientation, arena().game, playArena(dt, orientation, focal, width, height, seen, !buttons, paused));
+    } else if (inArcade()) {
+      arcadeWas = true;
+      arcade.frame(state.experience, ctx, width, height, focal, orientation, dt, {
+        real: PVR.settings.real, handsOn: !buttons, seen, held: sides.held, taps: sides.taps, paused,
+        lookThrough: (q, point) => lookThrough(q, focal, width, height, point),
+      });
     }
+    if (!inArcade() && arcadeWas) { arcadeWas = false; arcade.leave(); }
+    sides.taps.left = sides.taps.right = false;
     // While real steps can walk you: how many have been felt, or that none can be.
     if (walkable() && PVR.settings.steps && !paused) {
       const way = PVR.settings.stepWay && stepCounter.steps ? ['forward', 'left', 'back', 'right'][((Math.round(blockPlay.strideTurn / (Math.PI / 2)) % 4) + 4) % 4] : '';
@@ -603,6 +626,7 @@ function sidePress() {
     state.select = true;
     return;
   }
+  if (state.experience !== 'pop-the-targets') return;
   const aimed = targets.aimedAt(tracking.orientation(), tracking.frontYaw());
   if (aimed >= 0) targets.pop(aimed);
 }
@@ -813,7 +837,10 @@ async function start(options) {
   }
 }
 
-startButton.addEventListener('click', () => start());
+startButton.addEventListener('click', () => {
+  if (PVR.audio) PVR.audio.unlock(); // sound may only start from a tap
+  start();
+});
 document.getElementById('retry').addEventListener('click', tryAgain);
 continueButton.addEventListener('click', () => start({ skipMotion: true }));
 document.getElementById('notice-ok').addEventListener('click', () => showNotice(null));
@@ -826,6 +853,17 @@ exitButton.addEventListener('click', () => { if (state.experience === HOME) rout
 recentreButton.addEventListener('click', () => tracking.recentre());
 playAgainButton.addEventListener('click', playAgain);
 for (const button of sideButtons) button.addEventListener('click', sidePress);
+// The arcade games also want to know while a side button is held down.
+sideButtons.forEach((button, i) => {
+  const side = i ? 'right' : 'left';
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']) {
+    button.addEventListener(type, () => {
+      const down = type === 'pointerdown';
+      if (down && !sides.held[side]) sides.taps[side] = true;
+      sides.held[side] = down;
+    });
+  }
+});
 
 // Block world: WALK works while it is held; the others act once for each tap.
 for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave']) {

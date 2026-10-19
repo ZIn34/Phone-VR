@@ -55,6 +55,7 @@ window.PVR = window.PVR || {};
   const FRAGMENT = `
     precision highp float;
     uniform vec3 uSky;
+    uniform vec2 uHaze;
     uniform float uSeeThrough;
     varying vec2 vUv;
     varying vec3 vColour;
@@ -69,7 +70,7 @@ window.PVR = window.PVR || {};
       if (edge < 0.035) colour *= 0.78;
       // Far away fades into the sky, which also hides the edge of the world.
       // Over the camera picture there is no sky, so far blocks fade away instead.
-      float haze = smoothstep(13.0, 24.0, vFar);
+      float haze = smoothstep(uHaze.x, uHaze.y, vFar);
       gl_FragColor = uSeeThrough > 0.5 ? vec4(colour, 1.0 - haze) : vec4(mix(colour, uSky, haze), 1.0);
     }`;
 
@@ -154,6 +155,8 @@ window.PVR = window.PVR || {};
       orientation: [0, 0, 0, 1],  // which way the player is looking
       target: null,               // the block being aimed at, to outline
       boxes: [],                  // loose boxes to draw this frame: { low: [x, y, z], high: [x, y, z], colour: [r, g, b] }
+      sky: null,                  // [r, g, b] for a sky other than the daytime one (the arcade games)
+      haze: null,                 // [from, to]: how far away things start and finish fading into the sky
 
       // How zoomed the world is. A made-up world is shown wider than a true
       // window would be, or you would only ever see a sliver of it.
@@ -224,13 +227,16 @@ window.PVR = window.PVR || {};
           px * dot(right), focal * dot(up), pz * dot(back) + pw, -dot(back),
         ]);
 
-        if (scene.seeThrough) gl.clearColor(0, 0, 0, 0); else gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
+        const sky = scene.sky || SKY;
+        const haze = scene.haze || [13, 24];
+        if (scene.seeThrough) gl.clearColor(0, 0, 0, 0); else gl.clearColor(sky[0], sky[1], sky[2], 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.enable(gl.DEPTH_TEST);
 
         gl.useProgram(blocks);
         gl.uniformMatrix4fv(gl.getUniformLocation(blocks, 'uCamera'), false, camera);
-        gl.uniform3f(gl.getUniformLocation(blocks, 'uSky'), SKY[0], SKY[1], SKY[2]);
+        gl.uniform3f(gl.getUniformLocation(blocks, 'uSky'), sky[0], sky[1], sky[2]);
+        gl.uniform2f(gl.getUniformLocation(blocks, 'uHaze'), haze[0], haze[1]);
         gl.uniform1f(gl.getUniformLocation(blocks, 'uSeeThrough'), scene.seeThrough ? 1 : 0);
         gl.enableVertexAttribArray(at.place);
         gl.enableVertexAttribArray(at.uv);

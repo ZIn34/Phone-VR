@@ -104,6 +104,28 @@ too long or too short.
 Please tell me: does leaning out and ducking back feel natural, does the
 trigger pull fire when you mean it to and only then, is it too easy or too hard.
 
+## 3d. Fruit slice, Beat blocks, Space run
+
+Sound: these three have sound effects (Beat blocks has music). Turn the
+phone's sound up and the silent switch off.
+
+- **Fruit slice**: fruit is tossed up in front of you. Level 1: hold **SLICE**
+  and sweep the cross through it by turning the phone quickly. Levels 2 and 3:
+  swipe your fingertip through it. Three in one swipe is a combo. Three fruit
+  dropped and it is over; slice a bomb and it is over at once.
+- **Beat blocks**: blocks fly at you in time with the music. Level 1: tap
+  **RED** for red blocks and **BLUE** for blue ones as they reach their
+  frames. Levels 2 and 3: touch each block with your fingertip as it arrives.
+  Finish the song for a grade.
+- **Space run**: look where you want to fly and the ship drifts that way.
+  Fly through the gold rings, dodge or blast the rocks: **FIRE** at Level 1,
+  or pinch at Levels 2 and 3 to fire where your fingertip points.
+
+Tap a button (Level 1) or pinch (Levels 2 and 3) to play again.
+
+Please tell me: which is most fun, is anything too hard or too easy, does the
+music keep time with the blocks, and is anything jerky.
+
 ## 4. Head tracking and eye fit
 
 1. From the home menu choose **See your room**. The buttons stay on screen here.

@@ -9,6 +9,9 @@ PVR.experiences = {
   'follow-the-circle': { title: 'Follow the circle', group: 'Games' },
   'block-world': { title: 'Block world', group: 'Games' },
   'blaster-arena': { title: 'Blaster arena', group: 'Games' },
+  'fruit-slice': { title: 'Fruit slice', group: 'Games' },
+  'beat-blocks': { title: 'Beat blocks', group: 'Games' },
+  'space-run': { title: 'Space run', group: 'Games' },
   'see-your-room': { title: 'See your room', group: 'Testing' },
   'pop-the-targets': { title: 'Pop the targets', group: 'Testing' },
 };
