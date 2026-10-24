@@ -423,7 +423,10 @@ window.PVR = window.PVR || {};
         text(ctx, input.handsOn ? 'Point at a tile and pinch' : 'Aim the cross at a tile, then tap SELECT', middle[0], height * 0.055, 18, '#3dffb0');
 
         // Press last, so a tile that changes the screen does not disturb this frame's drawing.
-        for (const t of pressed) t.run();
+        for (const t of pressed) {
+          if (actions.sound) actions.sound('click');
+          t.run();
+        }
       },
     };
   };

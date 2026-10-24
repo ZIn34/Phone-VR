@@ -113,6 +113,65 @@ for (const name in worlds) {
   }
 }
 let world = worlds.sim; // the one in use; follows the Real life / Simulation setting
+
+// Sound effects, for the games that make none of their own (see audio.js).
+const sfx = (name) => { if (PVR.audio) PVR.audio.play(name); };
+// Block world: a sound for each thing done that worked.
+for (const name in worlds) {
+  const w = worlds[name];
+  const withSound = (target, method, sound) => {
+    const plain = target[method];
+    target[method] = (...args) => {
+      const done = plain(...args);
+      if (done) sfx(sound);
+      return done;
+    };
+  };
+  withSound(w, 'build', 'place');
+  withSound(w, 'dig', 'dig');
+  withSound(w, 'jump', 'jump');
+  withSound(w, 'craft', 'craft');
+  withSound(w.life, 'hit', 'thud');
+}
+
+// Sounds for what happens by itself in a game, found by comparing each frame with the last.
+let heard = {};
+function listen() {
+  const was = heard;
+  const is = { experience: state.experience };
+  const same = was.experience === state.experience;
+  if (state.experience === 'block-world') {
+    Object.assign(is, { world, health: world.life.health, knocked: world.life.knocked.animals + world.life.knocked.enemies });
+    if (same && was.world === world) {
+      if (is.health < was.health - 0.5) sfx('hurt');
+      if (is.knocked > was.knocked) sfx('poof');
+    }
+    if (world.landed > 1.2) sfx('land');
+  } else if (state.experience === 'blaster-arena') {
+    const { game: g, run } = arena();
+    Object.assign(is, { game: g, health: g.health, bolts: g.bolts.length, score: g.score, owned: g.owned.length, run: run.state, over: g.over });
+    if (same && was.game === g) {
+      if (is.bolts > was.bolts) sfx('zap');
+      if (is.health < was.health) sfx('hurt');
+      if (is.score > was.score) sfx('poof');
+      if (is.owned > was.owned) sfx('pickup');
+      if (is.run === 'cleared' && was.run !== 'cleared') sfx('cleared');
+      if (is.run === 'moving' && was.run !== 'moving') sfx('door');
+      if (is.over && !was.over) sfx('lose');
+    }
+  } else if (state.experience === 'follow-the-circle') {
+    Object.assign(is, { phase: game.phase, on: game.onTarget });
+    if (same) {
+      if (is.phase === 'playing' && was.phase !== 'playing') sfx('start');
+      if (is.phase === 'done' && was.phase === 'playing') sfx('cleared');
+      if (is.phase === 'playing' && is.on && !was.on) sfx('tick');
+    }
+  } else if (state.experience === 'pop-the-targets') {
+    is.popped = targets.popped;
+    if (same && is.popped > was.popped) sfx('pop');
+  }
+  heard = is;
+}
 let blockScene = null;
 try {
   if (view) blockScene = PVR.createBlockScene(view.gl);
@@ -184,6 +243,13 @@ function makeArena(name) {
   const land = PVR.blocks.createWorld(WORLD_SEED + 7, name === 'real', 'rooms');
   const game = PVR.shooter.createShooter(land, Date.now());
   arenas[name] = { land, game, run: PVR.rooms.createRun(land, game, Date.now()) };
+  // A sound for each shot, and for a hit.
+  const fire = game.fire;
+  game.fire = (...args) => {
+    const shot = fire(...args);
+    if (shot) sfx(shot.hit ? 'hit' : 'laser');
+    return shot;
+  };
   game.onOver = (score) => {
     arenaPlay.bestShown = arenaPlay.best;
     if (score > arenaPlay.best) {
@@ -463,6 +529,7 @@ const menu = PVR.createMenu({
   home: goHome,
   recipes,
   playAgain,
+  sound: sfx,
   canPlayAgain: () => (state.experience === 'follow-the-circle' && game.phase === 'done') || (state.experience === 'blaster-arena' && arena().game.over)
     || (inArcade() && arcade.game(state.experience).over),
 });
@@ -601,6 +668,7 @@ if (view) {
       });
     }
     if (!inArcade() && arcadeWas) { arcadeWas = false; arcade.leave(); }
+    if (!paused) listen();
     sides.taps.left = sides.taps.right = false;
     // While real steps can walk you: how many have been felt, or that none can be.
     if (walkable() && PVR.settings.steps && !paused) {

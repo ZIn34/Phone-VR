@@ -106,8 +106,8 @@ trigger pull fire when you mean it to and only then, is it too easy or too hard.
 
 ## 3d. Fruit slice, Beat blocks, Space run
 
-Sound: these three have sound effects (Beat blocks has music). Turn the
-phone's sound up and the silent switch off.
+Sound: every game has sound effects, and Beat blocks has music. Turn the
+phone's sound up and the silent switch off. **Sound** in Settings turns it all off.
 
 - **Fruit slice**: fruit is tossed up in front of you. Level 1: hold **SLICE**
   and sweep the cross through it by turning the phone quickly. Levels 2 and 3:

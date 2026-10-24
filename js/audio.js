@@ -83,10 +83,28 @@ window.PVR = window.PVR || {};
     break: (t) => { hiss(t, 0.25, 3000, 400, 0.5); tone(t, 0.1, 200, 80, 'square', 0.15); },
     lose: (t) => { tone(t, 0.25, 440, 440, 'triangle', 0.3); tone(t + 0.22, 0.25, 349, 349, 'triangle', 0.3); tone(t + 0.44, 0.6, 262, 200, 'triangle', 0.3); },
     start: (t) => { tone(t, 0.12, 523, 523, 'triangle', 0.3); tone(t + 0.1, 0.12, 659, 659, 'triangle', 0.3); tone(t + 0.2, 0.25, 784, 784, 'triangle', 0.3); },
+    // The menu, Block world, Blaster arena, Follow the circle and Pop the targets.
+    click: (t) => tone(t, 0.05, 1500, 1100, 'triangle', 0.18),
+    dig: (t) => { hiss(t, 0.14, 1200, 300, 0.45, 'lowpass'); tone(t, 0.08, 180, 90, 'square', 0.12); },
+    place: (t) => { tone(t, 0.09, 260, 140, 'triangle', 0.4); hiss(t, 0.05, 2000, 800, 0.15); },
+    jump: (t) => tone(t, 0.16, 300, 620, 'square', 0.1),
+    land: (t) => { hiss(t, 0.12, 600, 150, 0.4, 'lowpass'); tone(t, 0.1, 120, 60, 'sine', 0.4); },
+    hurt: (t) => { tone(t, 0.2, 220, 110, 'sawtooth', 0.22); hiss(t, 0.1, 900, 300, 0.25, 'lowpass'); },
+    thud: (t) => { tone(t, 0.1, 160, 80, 'sine', 0.5); hiss(t, 0.07, 1500, 500, 0.3); },
+    poof: (t) => { hiss(t, 0.35, 3000, 300, 0.4); tone(t, 0.25, 600, 200, 'triangle', 0.15); },
+    craft: (t) => { tone(t, 0.1, 880, 880, 'triangle', 0.22); tone(t + 0.07, 0.1, 1175, 1175, 'triangle', 0.22); tone(t + 0.14, 0.2, 1568, 1568, 'triangle', 0.22); },
+    zap: (t) => tone(t, 0.3, 500, 120, 'sawtooth', 0.1),
+    door: (t) => { hiss(t, 0.7, 300, 120, 0.4, 'lowpass'); tone(t, 0.6, 70, 50, 'square', 0.12); },
+    cleared: (t) => { [523, 659, 784, 1047].forEach((f, i) => tone(t + i * 0.09, 0.22, f, f, 'triangle', 0.28)); },
+    pickup: (t) => { tone(t, 0.08, 660, 660, 'square', 0.12); tone(t + 0.07, 0.14, 990, 990, 'square', 0.12); },
+    tick: (t) => tone(t, 0.07, 1046, 1046, 'sine', 0.22),
+    pop: (t) => { tone(t, 0.07, 900, 200, 'sine', 0.45); hiss(t, 0.05, 5000, 2000, 0.25, 'highpass'); },
   };
+  // The Sound setting: off means silent, though the music's clock still keeps time.
+  const muted = () => PVR.settings && PVR.settings.sound === false;
 
   function play(name) {
-    if (!ready() || !SOUNDS[name]) return;
+    if (!ready() || !SOUNDS[name] || muted()) return;
     SOUNDS[name](ctx.currentTime + 0.005);
   }
 
@@ -105,8 +123,8 @@ window.PVR = window.PVR || {};
     const random = () => ((r = (r * 1664525 + 1013904223) >>> 0) / 4294967296);
     const tune = [];
     for (let i = 0; i < 32; i++) tune.push(random() < 0.55 ? Math.floor(random() * 3) : -1);
-    const startAt = (ready() ? ctx.currentTime : performance.now() / 1000) + 0.1 - from * beat;
-    song = { bpm, beat, startAt, next: Math.max(0, Math.ceil(from * 2)), timer: 0, audio: ready() };
+    const startAt = (ready() && !muted() ? ctx.currentTime : performance.now() / 1000) + 0.1 - from * beat;
+    song = { bpm, beat, startAt, next: Math.max(0, Math.ceil(from * 2)), timer: 0, audio: ready() && !muted() };
     if (!song.audio) return;
     const ahead = () => {
       // Every half beat that falls in the next fifth of a second.
